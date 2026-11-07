@@ -1,0 +1,12 @@
+[package]
+name = "cliptrace-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "cliptrace"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+cliptrace-core = { path = "../cliptrace-core" }
