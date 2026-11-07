@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::search::escape_fts_query;
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -43,6 +44,16 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("clip {0} not found")]
+    NotFound(i64),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchHit {
+    pub id: i64,
+    pub last_seen_at: i64,
+    pub source_exe: String,
+    pub preview: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,6 +127,48 @@ impl Store {
             )
             .optional()?;
         Ok(row)
+    }
+
+    pub fn search_keyword(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, StoreError> {
+        let Some(match_query) = escape_fts_query(query) else {
+            return Ok(Vec::new());
+        };
+        let limit = limit.max(1) as i64;
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, '')
+             FROM clips_fts
+             JOIN clips c ON c.id = clips_fts.rowid
+             WHERE clips_fts MATCH ?1
+             ORDER BY bm25(clips_fts) ASC, c.last_seen_at DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![match_query, limit], |row| {
+            let content: String = row.get(3)?;
+            Ok(SearchHit {
+                id: row.get(0)?,
+                last_seen_at: row.get(1)?,
+                source_exe: row.get(2)?,
+                preview: content.chars().take(60).collect(),
+            })
+        })?;
+        let mut hits = Vec::new();
+        for row in rows {
+            hits.push(row?);
+        }
+        Ok(hits)
+    }
+
+    pub fn clip_content(&self, id: i64) -> Result<String, StoreError> {
+        let content: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT content FROM clips WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        content.ok_or(StoreError::NotFound(id))
     }
 }
 
@@ -222,6 +275,44 @@ mod tests {
             })
             .expect("persisted");
         assert_eq!(copy_count, 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keyword_search_ranks_by_bm25_and_escapes_specials() {
+        let (dir, store) = temp_db();
+        store
+            .upsert_clip(&clip("unrelated banana muffin recipe"), 1_000)
+            .unwrap();
+        let stripe_once = store
+            .upsert_clip(&clip("pay with stripe once"), 2_000)
+            .unwrap();
+        let stripe_many = store
+            .upsert_clip(
+                &clip("stripe stripe stripe payment dashboard for stripe keys"),
+                3_000,
+            )
+            .unwrap();
+        let UpsertOutcome::Inserted { id: once_id } = stripe_once else {
+            panic!("once");
+        };
+        let UpsertOutcome::Inserted { id: many_id } = stripe_many else {
+            panic!("many");
+        };
+
+        let hits = store.search_keyword("stripe", 5).expect("search");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id, many_id, "higher term frequency ranks first");
+        assert_eq!(hits[1].id, once_id);
+
+        store
+            .search_keyword(r#"stripe -foo "bar" a:b *"#, 5)
+            .expect("special chars must not be FTS syntax errors");
+
+        let limited = store.search_keyword("stripe", 1).expect("limit");
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].id, many_id);
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -4,14 +4,14 @@ use std::thread;
 use std::time::Duration;
 
 use thiserror::Error;
-use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, MAX_PATH, WPARAM};
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND, LPARAM, LRESULT, MAX_PATH, WPARAM};
 use windows::Win32::System::DataExchange::{
-    AddClipboardFormatListener, CloseClipboard, GetClipboardData, GetClipboardOwner,
+    AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardOwner,
     IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
-    RemoveClipboardFormatListener,
+    RemoveClipboardFormatListener, SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::System::SystemInformation::GetSystemTime;
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -41,6 +41,10 @@ pub enum CaptureError {
     CreateWindow,
     #[error("AddClipboardFormatListener failed")]
     AddListener,
+    #[error("failed to open clipboard")]
+    OpenClipboard,
+    #[error("failed to write clipboard text")]
+    SetClipboard,
     #[error(transparent)]
     Windows(#[from] windows::core::Error),
 }
@@ -361,6 +365,48 @@ fn foreground_title() -> String {
         return String::new();
     }
     String::from_utf16_lossy(&buf[..n as usize])
+}
+
+pub fn set_clipboard_text(text: &str) -> Result<(), CaptureError> {
+    let mut wide: Vec<u16> = text.encode_utf16().collect();
+    wide.push(0);
+    let bytes = wide.len() * std::mem::size_of::<u16>();
+
+    if !open_clipboard_with_retry() {
+        return Err(CaptureError::OpenClipboard);
+    }
+
+    let result = (|| {
+        unsafe { EmptyClipboard()? };
+        let hglobal = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes)? };
+        let ptr = unsafe { GlobalLock(hglobal) };
+        if ptr.is_null() {
+            unsafe {
+                let _ = GlobalFree(hglobal);
+            }
+            return Err(CaptureError::SetClipboard);
+        }
+        // Safety: hglobal is GMEM_MOVEABLE of `bytes`; we copy utf-16 including NUL.
+        unsafe {
+            std::ptr::copy_nonoverlapping(wide.as_ptr().cast::<u8>(), ptr.cast::<u8>(), bytes);
+            let _ = GlobalUnlock(hglobal);
+        }
+        let handle = windows::Win32::Foundation::HANDLE(hglobal.0);
+        match unsafe { SetClipboardData(CF_UNICODETEXT, handle) } {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                unsafe {
+                    let _ = GlobalFree(hglobal);
+                }
+                Err(CaptureError::SetClipboard)
+            }
+        }
+    })();
+
+    unsafe {
+        let _ = CloseClipboard();
+    }
+    result
 }
 
 fn utc_timestamp() -> String {
