@@ -16,9 +16,11 @@ Nothing leaves your PC. The only network call is a one-time download of the sear
 
 ## Install
 
-1. Download `Cliptrace-<version>-win64.zip` from the [latest release](https://github.com/Ekpo-Emmanuel/cliptrace/releases/latest) and unzip it anywhere.
-2. Run `cliptrace-app.exe` as administrator. Keep `onnxruntime.dll` and `onnxruntime_providers_shared.dll` in the same folder.
+1. Download `Cliptrace_<version>_x64-setup.exe` from the [latest release](https://github.com/Ekpo-Emmanuel/cliptrace/releases/latest) and run it. It installs for your user only and does not ask for administrator rights during setup.
+2. Start Cliptrace from the Start menu.
 3. Press `Ctrl+Alt+V` to open the popup.
+
+If you prefer no installer, download `Cliptrace-<version>-win64.zip` instead and unzip it anywhere. Run `cliptrace-app.exe` as administrator, and keep `onnxruntime.dll` and `onnxruntime_providers_shared.dll` in the same folder.
 
 The first launch downloads the search model once, so it needs an internet connection. After that Cliptrace works offline. Until the model is ready, and if the ONNX Runtime files are missing, search falls back to keywords only. Settings → About shows whether search is `hybrid` or `keyword-only`.
 
@@ -123,6 +125,14 @@ cargo build --release --features custom-protocol
 ```
 
 The exe is `target\release\cliptrace-app.exe`. Without the `custom-protocol` feature it loads the dev server URL instead of the bundled UI.
+
+To build the installer, first copy `onnxruntime.dll`, `onnxruntime_providers_shared.dll` and `LICENSE-onnxruntime.txt` into `src-tauri\runtime\` (that folder is git-ignored). Then run, from the `src-tauri` folder:
+
+```bash
+../ui/node_modules/.bin/tauri build
+```
+
+The installer is written to `target\release\bundle\nsis\`.
 
 ### Command line
 

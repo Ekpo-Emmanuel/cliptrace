@@ -4,8 +4,8 @@
   "version": "0.3.0",
   "identifier": "dev.cliptrace.app",
   "build": {
-    "beforeDevCommand": "npm --prefix ../ui run dev",
-    "beforeBuildCommand": "npm --prefix ../ui run build",
+    "beforeDevCommand": "npm --prefix ui run dev",
+    "beforeBuildCommand": "npm --prefix ui run build",
     "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../ui/dist"
   },
@@ -32,7 +32,22 @@
     }
   },
   "bundle": {
-    "active": false,
-    "icon": ["icons/icon.png", "icons/icon.ico"]
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Emmanuel Ekpo",
+    "shortDescription": "Clipboard history for Windows with search by meaning",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "resources": {
+      "runtime/onnxruntime.dll": "onnxruntime.dll",
+      "runtime/onnxruntime_providers_shared.dll": "onnxruntime_providers_shared.dll",
+      "runtime/LICENSE-onnxruntime.txt": "LICENSE-onnxruntime.txt"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }
