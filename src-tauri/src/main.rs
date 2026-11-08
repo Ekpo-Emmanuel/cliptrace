@@ -11,7 +11,7 @@ use cliptrace_core::{
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND};
 use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -25,7 +25,16 @@ use windows::core::PCWSTR;
 struct AppState {
     embedder: Mutex<Option<Embedder>>,
     paused: Arc<AtomicBool>,
+    keyword_only: Arc<AtomicBool>,
+    skip_clipboard: Arc<AtomicBool>,
     recent: Arc<Mutex<Vec<ClipCard>>>,
+    pending_deletes: Arc<Mutex<Vec<i64>>>,
+}
+
+#[derive(Clone, Serialize)]
+struct StatusDto {
+    paused: bool,
+    keyword_only: bool,
 }
 
 static SINGLETON: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
@@ -53,29 +62,45 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let paused = Arc::new(AtomicBool::new(false));
+            let keyword_only = Arc::new(AtomicBool::new(false));
+            let skip_clipboard = Arc::new(AtomicBool::new(false));
             let recent = Arc::new(Mutex::new(Vec::new()));
-            spawn_backend(paused.clone(), recent.clone());
+            let pending_deletes = Arc::new(Mutex::new(Vec::new()));
+            spawn_backend(
+                app.handle().clone(),
+                paused.clone(),
+                skip_clipboard.clone(),
+                recent.clone(),
+            );
             app.manage(AppState {
                 embedder: Mutex::new(None),
                 paused: paused.clone(),
+                keyword_only: keyword_only.clone(),
+                skip_clipboard: skip_clipboard.clone(),
                 recent: recent.clone(),
+                pending_deletes: pending_deletes.clone(),
             });
-            build_tray(app.handle(), paused)?;
+            build_tray(app.handle(), paused, keyword_only)?;
             spawn_hotkey_thread(app.handle().clone());
             warmup_embedder(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             browse_clips,
-            list_tag_counts,
+            list_recent,
+            search_clips,
+            list_tags,
             set_pinned,
             add_tag,
             remove_tag,
             mark_clip_secret,
             delete_clip,
+            stage_delete,
+            unstage_delete,
+            clip_text,
             copy_clip,
             hide_popup,
-            capture_status
+            status,
         ])
         .run(tauri::generate_context!())
         .expect("cliptrace-app");
@@ -99,11 +124,16 @@ fn acquire_singleton() -> bool {
     }
 }
 
-fn spawn_backend(paused: Arc<AtomicBool>, recent: Arc<Mutex<Vec<ClipCard>>>) {
+fn spawn_backend(
+    app: AppHandle,
+    paused: Arc<AtomicBool>,
+    skip_clipboard: Arc<AtomicBool>,
+    recent: Arc<Mutex<Vec<ClipCard>>>,
+) {
     std::thread::Builder::new()
         .name("cliptrace-capture".into())
         .spawn(move || {
-            if let Err(err) = run_backend(paused, recent) {
+            if let Err(err) = run_backend(app, paused, skip_clipboard, recent) {
                 eprintln!("backend: {err}");
             }
         })
@@ -113,12 +143,17 @@ fn spawn_backend(paused: Arc<AtomicBool>, recent: Arc<Mutex<Vec<ClipCard>>>) {
 fn refresh_recent(store: &Store, recent: &Mutex<Vec<ClipCard>>) {
     if let Ok(cards) = store.list_cards(0, 50, &BrowseFilter::default()) {
         if let Ok(mut slot) = recent.lock() {
-            *slot = cards;
+            *slot = cards.into_iter().map(for_ipc).collect();
         }
     }
 }
 
-fn run_backend(paused: Arc<AtomicBool>, recent: Arc<Mutex<Vec<ClipCard>>>) -> anyhow::Result<()> {
+fn run_backend(
+    app: AppHandle,
+    paused: Arc<AtomicBool>,
+    skip_clipboard: Arc<AtomicBool>,
+    recent: Arc<Mutex<Vec<ClipCard>>>,
+) -> anyhow::Result<()> {
     let paths = cliptrace_core::Paths::resolve()?;
     paths.ensure_data_dir()?;
     let config = load_or_create(&paths)?;
@@ -148,6 +183,9 @@ fn run_backend(paused: Arc<AtomicBool>, recent: Arc<Mutex<Vec<ClipCard>>>) -> an
             blocklist: config.blocklist,
         },
         move |event| {
+            if skip_clipboard.swap(false, Ordering::SeqCst) {
+                return;
+            }
             if paused.load(Ordering::SeqCst) {
                 return;
             }
@@ -163,6 +201,7 @@ fn run_backend(paused: Arc<AtomicBool>, recent: Arc<Mutex<Vec<ClipCard>>>) -> an
             ) {
                 Ok(UpsertOutcome::Inserted { id }) | Ok(UpsertOutcome::Duplicate { id, .. }) => {
                     refresh_recent(&store, &recent_cache);
+                    let _ = app.emit("clips-changed", id);
                     if store.has_embedding(id).ok() == Some(false) {
                         if let Ok(search_text) = store.clip_search_text(id) {
                             worker.submit(id, search_text);
@@ -199,12 +238,21 @@ fn warmup_embedder(app: AppHandle) {
                     }
                 }
             }
-            Err(err) => eprintln!("embed warmup: {err}"),
+            Err(err) => {
+                eprintln!("embed warmup: {err}");
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.keyword_only.store(true, Ordering::SeqCst);
+                }
+            }
         }
     });
 }
 
-fn build_tray(app: &AppHandle, paused: Arc<AtomicBool>) -> tauri::Result<()> {
+fn build_tray(
+    app: &AppHandle,
+    paused: Arc<AtomicBool>,
+    keyword_only: Arc<AtomicBool>,
+) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pause capture", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -225,8 +273,18 @@ fn build_tray(app: &AppHandle, paused: Arc<AtomicBool>) -> tauri::Result<()> {
                     "Pause capture"
                 };
                 let _ = pause_item.set_text(label);
+                let _ = app.emit(
+                    "status-changed",
+                    StatusDto {
+                        paused: now,
+                        keyword_only: keyword_only.load(Ordering::SeqCst),
+                    },
+                );
             }
-            "quit" => app.exit(0),
+            "quit" => {
+                flush_pending(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .build(app)?;
@@ -318,7 +376,15 @@ fn show_popup(app: &AppHandle) {
             .try_state::<AppState>()
             .map(|state| state.paused.load(Ordering::SeqCst))
             .unwrap_or(false);
-        let payload = serde_json::json!({ "cards": cached, "paused": paused });
+        let keyword_only = app
+            .try_state::<AppState>()
+            .map(|state| state.keyword_only.load(Ordering::SeqCst))
+            .unwrap_or(false);
+        let payload = serde_json::json!({
+            "cards": cached,
+            "paused": paused,
+            "keyword_only": keyword_only
+        });
         let script = format!(
             "window.cliptraceOnOpen && window.cliptraceOnOpen({payload})"
         );
@@ -331,12 +397,41 @@ fn show_popup(app: &AppHandle) {
 
 fn hide_popup_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("popup") {
+        let _ = win.eval("window.cliptraceOnHide && window.cliptraceOnHide()");
         let _ = win.hide();
+    }
+}
+
+fn for_ipc(mut card: ClipCard) -> ClipCard {
+    if card.kind != "secret" {
+        card.body.clear();
+    }
+    card
+}
+
+fn flush_pending(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let ids = state
+        .pending_deletes
+        .lock()
+        .map(|mut v| std::mem::take(&mut *v))
+        .unwrap_or_default();
+    if ids.is_empty() {
+        return;
+    }
+    if let Ok(store) = open_store() {
+        for id in ids {
+            let _ = store.delete_clip(id);
+        }
+        refresh_recent(&store, &state.recent);
     }
 }
 
 #[tauri::command]
 fn hide_popup(app: AppHandle) {
+    flush_pending(&app);
     hide_popup_window(&app);
 }
 
@@ -372,9 +467,12 @@ fn browse_clips(
     let paused = state.paused.load(Ordering::SeqCst);
     let trimmed = query.trim();
     if trimmed.is_empty() {
-        let cards = store
+        let cards: Vec<ClipCard> = store
             .list_cards(offset.max(0), 50, &filter)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(for_ipc)
+            .collect();
         if offset <= 0 && tab == "recent" && tag.trim().is_empty() {
             if let Ok(mut slot) = state.recent.lock() {
                 *slot = cards.clone();
@@ -404,17 +502,29 @@ fn browse_clips(
                     let dll = config.resolved_onnxruntime_path(&paths);
                     match Embedder::load(&paths.models_dir, &dll) {
                         Ok(e) => *slot = Some(e),
-                        Err(err) => note = Some(format!("keyword-only: {err}")),
+                        Err(err) => {
+                            note = Some(format!("keyword-only: {err}"));
+                            state.keyword_only.store(true, Ordering::SeqCst);
+                        }
                     }
                 }
                 if let Some(embedder) = slot.as_mut() {
                     match embedder.embed_query(&parsed.text, true) {
-                        Ok(v) => vector = Some(v),
-                        Err(err) => note = Some(format!("keyword-only: {err}")),
+                        Ok(v) => {
+                            vector = Some(v);
+                            state.keyword_only.store(false, Ordering::SeqCst);
+                        }
+                        Err(err) => {
+                            note = Some(format!("keyword-only: {err}"));
+                            state.keyword_only.store(true, Ordering::SeqCst);
+                        }
                     }
                 }
             }
-            Err(_) => note = Some("keyword-only: embedder lock".into()),
+            Err(_) => {
+                note = Some("keyword-only: embedder lock".into());
+                state.keyword_only.store(true, Ordering::SeqCst);
+            }
         }
     }
     let outcome = hybrid_search(&store, trimmed, now_ms, 50, vector.as_deref(), &filter)
@@ -424,11 +534,17 @@ fn browse_clips(
             let dll = config.resolved_onnxruntime_path(&paths);
             if !dll.is_file() {
                 note = Some("keyword-only: onnxruntime.dll missing".into());
+                state.keyword_only.store(true, Ordering::SeqCst);
             }
         }
     }
     let ids: Vec<i64> = outcome.hits.iter().map(|h| h.id).collect();
-    let cards = store.cards_for_ids(&ids).map_err(|e| e.to_string())?;
+    let cards = store
+        .cards_for_ids(&ids)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(for_ipc)
+        .collect();
     Ok(BrowsePayload {
         cards,
         pinned,
@@ -439,7 +555,33 @@ fn browse_clips(
 }
 
 #[tauri::command]
-fn list_tag_counts() -> Result<Vec<TagDto>, String> {
+fn list_recent(
+    offset: i64,
+    limit: i64,
+    tab: String,
+    tag: String,
+    state: tauri::State<AppState>,
+) -> Result<BrowsePayload, String> {
+    browse_clips(String::new(), tab, tag, offset, state).map(|mut p| {
+        if limit > 0 {
+            p.cards.truncate(limit as usize);
+        }
+        p
+    })
+}
+
+#[tauri::command]
+fn search_clips(
+    query: String,
+    tab: String,
+    tag: String,
+    state: tauri::State<AppState>,
+) -> Result<BrowsePayload, String> {
+    browse_clips(query, tab, tag, 0, state)
+}
+
+#[tauri::command]
+fn list_tags() -> Result<Vec<TagDto>, String> {
     let store = open_store()?;
     let tags = store.list_tags().map_err(|e| e.to_string())?;
     Ok(tags
@@ -491,27 +633,68 @@ fn mark_clip_secret(id: i64) -> Result<ClipCard, String> {
     one_card(&store, id)
 }
 
-#[tauri::command]
-fn delete_clip(id: i64) -> Result<(), String> {
-    let store = open_store()?;
-    store.delete_clip(id).map_err(|e| e.to_string())
-}
-
 fn one_card(store: &Store, id: i64) -> Result<ClipCard, String> {
     let mut cards = store.cards_for_ids(&[id]).map_err(|e| e.to_string())?;
-    cards.pop().ok_or_else(|| format!("clip {id} not found"))
+    let card = cards.pop().ok_or_else(|| format!("clip {id} not found"))?;
+    Ok(for_ipc(card))
 }
 
 #[tauri::command]
-fn capture_status(state: tauri::State<AppState>) -> bool {
-    state.paused.load(Ordering::SeqCst)
+fn clip_text(id: i64) -> Result<String, String> {
+    let store = open_store()?;
+    store.clip_plain_text(id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn copy_clip(id: i64) -> Result<(), String> {
+fn status(state: tauri::State<AppState>) -> StatusDto {
+    StatusDto {
+        paused: state.paused.load(Ordering::SeqCst),
+        keyword_only: state.keyword_only.load(Ordering::SeqCst),
+    }
+}
+
+#[tauri::command]
+fn copy_clip(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
     let store = open_store()?;
     let content = store.clip_content(id).map_err(|e| e.to_string())?;
-    set_clipboard_text(&content).map_err(|e| e.to_string())?;
+    state.skip_clipboard.store(true, Ordering::SeqCst);
+    if let Err(err) = set_clipboard_text(&content) {
+        state.skip_clipboard.store(false, Ordering::SeqCst);
+        return Err(err.to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_clip(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
+    if let Ok(mut pending) = state.pending_deletes.lock() {
+        pending.retain(|x| *x != id);
+    }
+    let store = open_store()?;
+    store.delete_clip(id).map_err(|e| e.to_string())?;
+    refresh_recent(&store, &state.recent);
+    Ok(())
+}
+
+#[tauri::command]
+fn stage_delete(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
+    let mut pending = state
+        .pending_deletes
+        .lock()
+        .map_err(|_| "pending deletes lock".to_string())?;
+    if !pending.contains(&id) {
+        pending.push(id);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn unstage_delete(id: i64, state: tauri::State<AppState>) -> Result<(), String> {
+    let mut pending = state
+        .pending_deletes
+        .lock()
+        .map_err(|_| "pending deletes lock".to_string())?;
+    pending.retain(|x| *x != id);
     Ok(())
 }
 

@@ -331,8 +331,28 @@ export function createMockApi(): CliptraceApi {
       void _id;
     },
     async hidePopup() {},
-    async captureStatus() {
-      return paused;
+    async stageDelete(_id) {
+      void _id;
+    },
+    async unstageDelete(_id) {
+      void _id;
+    },
+    async clipText(id) {
+      const card = must(id);
+      if (card.kind === "secret") throw new Error(`clip ${id} is a secret`);
+      return card.body;
+    },
+    async status() {
+      return {
+        paused,
+        keyword_only: state === "keyword-only",
+      };
+    },
+    async onClipsChanged() {
+      return () => {};
+    },
+    async onStatusChanged() {
+      return () => {};
     },
   };
 }

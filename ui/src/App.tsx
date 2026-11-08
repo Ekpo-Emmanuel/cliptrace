@@ -38,12 +38,29 @@ export default function App() {
   const [suggestIndex, setSuggestIndex] = useState(0);
   const timer = useRef(0);
   const copiedTimer = useRef(0);
+  const seq = useRef(0);
+  const selectedId = useRef<number | null>(null);
+  const pendingDel = useRef<Map<number, number>>(new Map());
+  const queryRef = useRef(query);
+  const tabRef = useRef(tab);
+  const loadRef = useRef<(
+    reset: boolean,
+    q?: string,
+    nextTab?: Tab,
+    keepSelection?: boolean,
+  ) => Promise<void>>(async () => {});
   const [copied, setCopied] = useState(false);
+  const [errToast, setErrToast] = useState<string | null>(null);
+  const [undoId, setUndoId] = useState<number | null>(null);
+  const [fullText, setFullText] = useState<Record<number, string>>({});
+  queryRef.current = query;
+  tabRef.current = tab;
 
   const load = useCallback(
-    async (reset: boolean, q = query, nextTab = tab) => {
+    async (reset: boolean, q = query, nextTab = tab, keepSelection = !reset) => {
       const api = apiRef.current ?? (await getApi());
       apiRef.current = api;
+      const my = ++seq.current;
       const off = reset ? 0 : offset;
       const payload: BrowsePayload = await api.browseClips({
         query: q,
@@ -51,36 +68,109 @@ export default function App() {
         tag: "",
         offset: off,
       });
-      const next = payload.cards;
-      setCards((prev) => (reset ? next : prev.concat(next)));
-      if (reset) {
-        setSelected(0);
-        setPickIds([]);
-      }
+      if (my !== seq.current) return;
+      const hidden = new Set(pendingDel.current.keys());
+      const next = payload.cards.filter((c) => !hidden.has(c.id));
+      setCards((prev) => {
+        const merged = reset ? next : prev.concat(next);
+        if (keepSelection && selectedId.current != null) {
+          const idx = merged.findIndex((c) => c.id === selectedId.current);
+          setSelected(idx >= 0 ? idx : 0);
+        } else if (reset && !keepSelection) {
+          setSelected(0);
+          selectedId.current = merged[0]?.id ?? null;
+        }
+        return merged;
+      });
+      if (reset && !keepSelection) setPickIds([]);
       setPinned(payload.pinned);
       setTotal(payload.total);
-      setNote(payload.note);
-      setPaused(payload.paused);
+      const st = await api.status().catch(() => null);
+      if (my !== seq.current) return;
+      const keyword =
+        st?.keyword_only ||
+        (payload.note != null && payload.note.startsWith("keyword-only"));
+      setNote(
+        keyword
+          ? payload.note ?? "keyword-only: embeddings unavailable"
+          : payload.note,
+      );
+      setPaused(st?.paused ?? payload.paused);
       setOffset(off + next.length);
       setDone(!!q.trim() || next.length < 50);
       const tags = await api.listTagCounts();
+      if (my !== seq.current) return;
       setAllTags(tags);
     },
     [offset, query, tab],
   );
 
   useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  useEffect(() => {
+    let unClips = () => {};
+    let unStatus = () => {};
     void (async () => {
-      apiRef.current = await getApi();
-      await load(true, "", "recent");
+      const api = await getApi();
+      apiRef.current = api;
+      const st = await api.status();
+      setPaused(st.paused);
+      if (st.keyword_only) setNote("keyword-only: embeddings unavailable");
+      await loadRef.current(true, "", "recent", false);
+      unClips = await api.onClipsChanged(() => {
+        void loadRef.current(true, queryRef.current, tabRef.current, true);
+      });
+      unStatus = await api.onStatusChanged((s) => {
+        setPaused(s.paused);
+        setNote((n) =>
+          s.keyword_only
+            ? n?.startsWith("keyword-only")
+              ? n
+              : "keyword-only: embeddings unavailable"
+            : n?.startsWith("keyword-only")
+              ? null
+              : n,
+        );
+      });
     })();
-    window.cliptraceOnOpen = () => {
+    window.cliptraceOnOpen = (cache) => {
       setQuery("");
       setTab("recent");
-      void load(true, "", "recent");
+      setPickIds([]);
+      if (cache?.cards?.length) {
+        setCards(cache.cards);
+        setSelected(0);
+        selectedId.current = cache.cards[0]?.id ?? null;
+        setPaused(!!cache.paused);
+        if (cache.keyword_only) {
+          setNote("keyword-only: embeddings unavailable");
+        }
+      }
+      void loadRef.current(true, "", "recent", false);
       document.getElementById("q")?.focus();
     };
+    window.cliptraceOnHide = () => {
+      void flushDeletes();
+    };
+    return () => {
+      unClips();
+      unStatus();
+    };
   }, []);
+
+  useEffect(() => {
+    const card = cards[selected];
+    if (!card || card.kind === "secret") return;
+    if (fullText[card.id]) return;
+    void apiRef.current
+      ?.clipText(card.id)
+      .then((text) => {
+        setFullText((map) => ({ ...map, [card.id]: text }));
+      })
+      .catch(() => {});
+  }, [cards, selected, fullText]);
 
   function schedule(value: string) {
     setQuery(value);
@@ -111,7 +201,15 @@ export default function App() {
     document.getElementById("q")?.focus();
   }
 
-  const current = cards[selected];
+  const current = cards[selected]
+    ? {
+        ...cards[selected],
+        body:
+          cards[selected].kind === "secret"
+            ? cards[selected].preview
+            : (fullText[cards[selected].id] ?? cards[selected].preview),
+      }
+    : undefined;
 
   function flashCopied() {
     setCopied(true);
@@ -119,39 +217,95 @@ export default function App() {
     copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
   }
 
-  async function copy(id?: number) {
+  async function copy(id?: number, hideAfter = false) {
     const card =
       id != null ? (cards.find((c) => c.id === id) ?? current) : current;
     if (!card) return;
-    await apiRef.current?.copyClip(card.id);
-    flashCopied();
+    try {
+      await apiRef.current?.copyClip(card.id);
+      flashCopied();
+      if (hideAfter) {
+        window.setTimeout(() => void hideNow(), 280);
+      }
+    } catch (err) {
+      setErrToast(err instanceof Error ? err.message : "Copy failed");
+    }
+  }
+
+  async function hideNow() {
+    await flushDeletes();
+    await apiRef.current?.hidePopup();
+  }
+
+  async function flushDeletes() {
+    const api = apiRef.current;
+    if (!api) return;
+    for (const [id, handle] of pendingDel.current) {
+      window.clearTimeout(handle);
+      await api.deleteClip(id);
+    }
+    pendingDel.current.clear();
   }
 
   function selectRow(index: number) {
     setSelected(index);
-    const card = cards[index];
-    if (card) void copy(card.id);
+    selectedId.current = cards[index]?.id ?? null;
+  }
+
+  function fail(prev: ClipCard[], message: string) {
+    setCards(prev);
+    setErrToast(message);
+    window.setTimeout(() => setErrToast(null), 2400);
   }
 
   async function togglePin(card = current) {
     if (!card || !apiRef.current) return;
-    const next = await apiRef.current.setPinned(card.id, !card.pinned);
-    setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
-    void load(true);
+    const prev = cards;
+    setCards((list) =>
+      list.map((c) => (c.id === card.id ? { ...c, pinned: !c.pinned } : c)),
+    );
+    try {
+      const next = await apiRef.current.setPinned(card.id, !card.pinned);
+      setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+    } catch (err) {
+      fail(prev, err instanceof Error ? err.message : "Pin failed");
+    }
   }
 
   async function addTag(tag: string) {
     if (!current || !apiRef.current) return;
-    const next = await apiRef.current.addTag(current.id, tag);
-    setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
-    setAllTags(await apiRef.current.listTagCounts());
+    const prev = cards;
+    setCards((list) =>
+      list.map((c) =>
+        c.id === current.id ? { ...c, tags: [...c.tags, tag] } : c,
+      ),
+    );
+    try {
+      const next = await apiRef.current.addTag(current.id, tag);
+      setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+      setAllTags(await apiRef.current.listTagCounts());
+    } catch (err) {
+      fail(prev, err instanceof Error ? err.message : "Tag failed");
+    }
   }
 
   async function removeTag(tag: string) {
     if (!current || !apiRef.current) return;
-    const next = await apiRef.current.removeTag(current.id, tag);
-    setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
-    setAllTags(await apiRef.current.listTagCounts());
+    const prev = cards;
+    setCards((list) =>
+      list.map((c) =>
+        c.id === current.id
+          ? { ...c, tags: c.tags.filter((t) => t !== tag) }
+          : c,
+      ),
+    );
+    try {
+      const next = await apiRef.current.removeTag(current.id, tag);
+      setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+      setAllTags(await apiRef.current.listTagCounts());
+    } catch (err) {
+      fail(prev, err instanceof Error ? err.message : "Untag failed");
+    }
   }
 
   function askSecret() {
@@ -161,9 +315,22 @@ export default function App() {
 
   async function confirmMarkSecret() {
     if (!current || !apiRef.current) return;
-    const next = await apiRef.current.markClipSecret(current.id);
-    setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+    const prev = cards;
+    const id = current.id;
+    setCards((list) =>
+      list.map((c) =>
+        c.id === id
+          ? { ...c, kind: "secret", preview: "[secret …]", body: "[secret …]" }
+          : c,
+      ),
+    );
     setConfirmSecret(false);
+    try {
+      const next = await apiRef.current.markClipSecret(id);
+      setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+    } catch (err) {
+      fail(prev, err instanceof Error ? err.message : "Mark secret failed");
+    }
   }
 
   function togglePick(id: number) {
@@ -190,10 +357,28 @@ export default function App() {
 
   function askDelete() {
     if (!current || !apiRef.current) return;
-    const id = current.id;
-    setCards((list) => list.filter((c) => c.id !== id));
+    const saved = current;
+    setCards((list) => list.filter((c) => c.id !== saved.id));
     setSelected((i) => Math.max(0, Math.min(i, cards.length - 2)));
-    void apiRef.current.deleteClip(id);
+    void apiRef.current.stageDelete(saved.id);
+    const handle = window.setTimeout(() => {
+      pendingDel.current.delete(saved.id);
+      setUndoId((id) => (id === saved.id ? null : id));
+      void apiRef.current?.deleteClip(saved.id);
+    }, 5000);
+    pendingDel.current.set(saved.id, handle);
+    setUndoId(saved.id);
+    setErrToast(null);
+  }
+
+  function undoDelete() {
+    if (undoId == null) return;
+    const handle = pendingDel.current.get(undoId);
+    if (handle != null) window.clearTimeout(handle);
+    pendingDel.current.delete(undoId);
+    void apiRef.current?.unstageDelete(undoId);
+    setUndoId(null);
+    void load(true, query, tab, false);
   }
 
   function changeTab(next: Tab) {
@@ -218,7 +403,7 @@ export default function App() {
           setSuggest([]);
           return;
         }
-        void apiRef.current?.hidePopup();
+        void hideNow();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "1") {
@@ -281,7 +466,7 @@ export default function App() {
         setSelected((i) => Math.max(0, i - 1));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        void copy();
+        void copy(undefined, true);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -300,6 +485,11 @@ export default function App() {
         <div className="font-label-md flex items-center gap-2 bg-tertiary-container px-space-md py-1 text-on-tertiary-container">
           <IconShield className="h-3.5 w-3.5" />
           Capture paused
+        </div>
+      ) : null}
+      {note?.startsWith("keyword-only") ? (
+        <div className="font-label-md flex items-center gap-2 bg-secondary-container px-space-md py-1 text-on-secondary-container">
+          Keyword-only search
         </div>
       ) : null}
       <div className="px-space-md pt-space-sm">
@@ -370,6 +560,20 @@ export default function App() {
         )}
       </div>
       <KeyHints empty={cards.length === 0} />
+      {errToast || undoId != null ? (
+        <div className="font-label-md absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-md bg-on-surface px-space-sm py-space-xs text-surface">
+          <span>{errToast ?? "Deleted"}</span>
+          {undoId != null ? (
+            <button
+              type="button"
+              className="font-label-md cursor-pointer underline"
+              onClick={undoDelete}
+            >
+              Undo
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {confirmSecret ? (
         <div className="absolute inset-0 z-30 flex items-end justify-center bg-slate/40 p-space-md">
           <div className="w-full max-w-sm rounded-md bg-surface-container-lowest p-space-md">

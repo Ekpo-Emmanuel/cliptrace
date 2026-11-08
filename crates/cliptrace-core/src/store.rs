@@ -69,6 +69,8 @@ pub enum StoreError {
     TooManyTags,
     #[error("clip {0} is already a secret")]
     AlreadySecret(i64),
+    #[error("clip {0} is a secret")]
+    IsSecret(i64),
 }
 
 #[derive(Clone, Debug)]
@@ -619,6 +621,25 @@ impl Store {
             let plain = dpapi_unprotect(&blob).map_err(|e| StoreError::Dpapi(e.to_string()))?;
             return String::from_utf8(plain)
                 .map_err(|e| StoreError::Dpapi(e.to_string()));
+        }
+        content.ok_or(StoreError::NotFound(id))
+    }
+
+    /// Full plaintext for preview. Secrets never leave as raw values.
+    pub fn clip_plain_text(&self, id: i64) -> Result<String, StoreError> {
+        let row: Option<(Option<String>, i64)> = self
+            .conn
+            .query_row(
+                "SELECT content, is_secret FROM clips WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((content, is_secret)) = row else {
+            return Err(StoreError::NotFound(id));
+        };
+        if is_secret == 1 {
+            return Err(StoreError::IsSecret(id));
         }
         content.ok_or(StoreError::NotFound(id))
     }

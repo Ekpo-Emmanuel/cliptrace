@@ -6,6 +6,11 @@ export {};
 
 declare global {
   interface Window {
-    cliptraceOnOpen?: (cache?: { cards?: ClipCard[]; paused?: boolean }) => void;
+    cliptraceOnOpen?: (cache?: {
+      cards?: ClipCard[];
+      paused?: boolean;
+      keyword_only?: boolean;
+    }) => void;
+    cliptraceOnHide?: () => void;
   }
 }

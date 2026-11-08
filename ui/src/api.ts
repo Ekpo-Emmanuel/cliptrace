@@ -33,6 +33,11 @@ export type BrowseArgs = {
   offset: number;
 };
 
+export type AppStatus = {
+  paused: boolean;
+  keyword_only: boolean;
+};
+
 export type CliptraceApi = {
   browseClips: (args: BrowseArgs) => Promise<BrowsePayload>;
   listTagCounts: () => Promise<TagCount[]>;
@@ -41,9 +46,14 @@ export type CliptraceApi = {
   removeTag: (id: number, tag: string) => Promise<ClipCard>;
   markClipSecret: (id: number) => Promise<ClipCard>;
   deleteClip: (id: number) => Promise<void>;
+  stageDelete: (id: number) => Promise<void>;
+  unstageDelete: (id: number) => Promise<void>;
+  clipText: (id: number) => Promise<string>;
   copyClip: (id: number) => Promise<void>;
   hidePopup: () => Promise<void>;
-  captureStatus: () => Promise<boolean>;
+  status: () => Promise<AppStatus>;
+  onClipsChanged: (cb: () => void) => Promise<() => void>;
+  onStatusChanged: (cb: (s: AppStatus) => void) => Promise<() => void>;
 };
 
 function isTauri(): boolean {
@@ -61,15 +71,28 @@ export function createTauriApi(invoke: Invoke): CliptraceApi {
         tag: args.tag,
         offset: args.offset,
       }),
-    listTagCounts: () => invoke<TagCount[]>("list_tag_counts"),
+    listTagCounts: () => invoke<TagCount[]>("list_tags"),
     setPinned: (id, pinned) => invoke<ClipCard>("set_pinned", { id, pinned }),
     addTag: (id, tag) => invoke<ClipCard>("add_tag", { id, tag }),
     removeTag: (id, tag) => invoke<ClipCard>("remove_tag", { id, tag }),
     markClipSecret: (id) => invoke<ClipCard>("mark_clip_secret", { id }),
     deleteClip: (id) => invoke("delete_clip", { id }),
+    stageDelete: (id) => invoke("stage_delete", { id }),
+    unstageDelete: (id) => invoke("unstage_delete", { id }),
+    clipText: (id) => invoke<string>("clip_text", { id }),
     copyClip: (id) => invoke("copy_clip", { id }),
     hidePopup: () => invoke("hide_popup"),
-    captureStatus: () => invoke<boolean>("capture_status"),
+    status: () => invoke<AppStatus>("status"),
+    onClipsChanged: async (cb) => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const un = await listen("clips-changed", () => cb());
+      return () => un();
+    },
+    onStatusChanged: async (cb) => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const un = await listen<AppStatus>("status-changed", (e) => cb(e.payload));
+      return () => un();
+    },
   };
 }
 
@@ -82,8 +105,15 @@ export function tauriAvailable(): boolean {
 export function getApi(): Promise<CliptraceApi> {
   if (!ready) {
     ready = (async () => {
-      const { createMockApi } = await import("./mock");
-      return createMockApi();
+      if (isTauri()) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        return createTauriApi(invoke as Invoke);
+      }
+      if (import.meta.env.DEV) {
+        const { createMockApi } = await import("./mock");
+        return createMockApi();
+      }
+      throw new Error("Tauri IPC is not available");
     })();
   }
   return ready;
