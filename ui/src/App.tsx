@@ -481,6 +481,17 @@ export default function App() {
 
   const frame = (
     <div className="relative flex h-[500px] w-[680px] flex-col overflow-hidden rounded-lg bg-white">
+      <div
+        className="flex h-3 shrink-0 cursor-grab items-center justify-center bg-white active:cursor-grabbing"
+        aria-label="Move window"
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          void apiRef.current?.startDrag();
+        }}
+      >
+        <span className="pointer-events-none h-0.5 w-8 rounded-full bg-outline-variant/50" />
+      </div>
       {paused ? (
         <div className="font-label-md flex items-center gap-2 bg-tertiary-container px-space-md py-1 text-on-tertiary-container">
           <IconShield className="h-3.5 w-3.5" />
@@ -559,21 +570,24 @@ export default function App() {
           </div>
         )}
       </div>
-      <KeyHints empty={cards.length === 0} />
-      {errToast || undoId != null ? (
-        <div className="font-label-md absolute bottom-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-md bg-on-surface px-space-sm py-space-xs text-surface">
-          <span>{errToast ?? "Deleted"}</span>
-          {undoId != null ? (
-            <button
-              type="button"
-              className="font-label-md cursor-pointer underline"
-              onClick={undoDelete}
-            >
-              Undo
-            </button>
-          ) : null}
+      {undoId != null ? (
+        <div className="font-label-xs flex items-center gap-2 border-t border-outline-variant/30 bg-surface-container-low px-2.5 py-1.5 text-on-surface">
+          <span>Deleted</span>
+          <button
+            type="button"
+            className="font-label-xs ml-auto cursor-pointer text-primary hover:underline"
+            onClick={undoDelete}
+          >
+            Undo
+          </button>
         </div>
       ) : null}
+      {errToast ? (
+        <div className="font-label-xs border-t border-outline-variant/30 bg-error-container px-2.5 py-1.5 text-on-error-container">
+          {errToast}
+        </div>
+      ) : null}
+      <KeyHints empty={cards.length === 0} />
       {confirmSecret ? (
         <div className="absolute inset-0 z-30 flex items-end justify-center bg-slate/40 p-space-md">
           <div className="w-full max-w-sm rounded-md bg-surface-container-lowest p-space-md">

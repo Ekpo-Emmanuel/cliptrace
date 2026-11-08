@@ -18,7 +18,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, RegisterHotKey,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetMessageW, MSG, TranslateMessage, WM_HOTKEY,
+    AllowSetForegroundWindow, DispatchMessageW, GetMessageW, MSG, TranslateMessage, WM_HOTKEY,
 };
 use windows::core::PCWSTR;
 
@@ -30,6 +30,7 @@ struct AppState {
     recent: Arc<Mutex<Vec<ClipCard>>>,
     pending_deletes: Arc<Mutex<Vec<i64>>>,
     ignore_blur_until: AtomicU64,
+    focus_armed: AtomicBool,
 }
 
 #[derive(Clone, Serialize)]
@@ -81,6 +82,7 @@ fn main() {
                 recent: recent.clone(),
                 pending_deletes: pending_deletes.clone(),
                 ignore_blur_until: AtomicU64::new(0),
+                focus_armed: AtomicBool::new(false),
             });
             build_tray(app.handle(), paused, keyword_only)?;
             spawn_hotkey_thread(app.handle().clone());
@@ -102,22 +104,42 @@ fn main() {
             clip_text,
             copy_clip,
             hide_popup,
+            begin_move,
             status,
         ])
         .on_window_event(|window, event| {
             if window.label() != "popup" {
                 return;
             }
-            let tauri::WindowEvent::Focused(false) = event else {
-                return;
-            };
-            if let Some(state) = window.try_state::<AppState>() {
-                let until = state.ignore_blur_until.load(Ordering::SeqCst);
-                if (unix_ms() as u64) < until {
-                    return;
+            match event {
+                tauri::WindowEvent::Moved(_) => {
+                    if let Some(state) = window.try_state::<AppState>() {
+                        state
+                            .ignore_blur_until
+                            .store(unix_ms() as u64 + 400, Ordering::SeqCst);
+                    }
                 }
+                tauri::WindowEvent::Focused(true) => {
+                    if let Some(state) = window.try_state::<AppState>() {
+                        state.focus_armed.store(true, Ordering::SeqCst);
+                    }
+                }
+                tauri::WindowEvent::Focused(false) => {
+                    let Some(state) = window.try_state::<AppState>() else {
+                        return;
+                    };
+                    if !state.focus_armed.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    let until = state.ignore_blur_until.load(Ordering::SeqCst);
+                    if (unix_ms() as u64) < until {
+                        return;
+                    }
+                    state.focus_armed.store(false, Ordering::SeqCst);
+                    hide_popup_now(window.app_handle());
+                }
+                _ => {}
             }
-            hide_popup_now(window.app_handle());
         })
         .run(tauri::generate_context!())
         .expect("cliptrace-app");
@@ -332,7 +354,8 @@ fn spawn_hotkey_thread(app: AppHandle) {
                     break;
                 }
                 if msg.message == WM_HOTKEY {
-                    show_popup(&app);
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || show_popup(&handle));
                 } else {
                     unsafe {
                         let _ = TranslateMessage(&msg);
@@ -406,12 +429,17 @@ fn show_popup(app: &AppHandle) {
             "window.cliptraceOnOpen && window.cliptraceOnOpen({payload})"
         );
         if let Some(state) = app.try_state::<AppState>() {
+            state.focus_armed.store(false, Ordering::SeqCst);
             state
                 .ignore_blur_until
-                .store(unix_ms() as u64 + 400, Ordering::SeqCst);
+                .store(unix_ms() as u64 + 800, Ordering::SeqCst);
         }
+        // Hotkey threads are not allowed to steal foreground without this.
+        // ASFW_ANY (u32::MAX) is the documented wildcard process id.
+        let _ = unsafe { AllowSetForegroundWindow(u32::MAX) };
         let _ = win.center();
         let _ = win.show();
+        let _ = win.unminimize();
         let _ = win.set_focus();
         let _ = win.eval(script);
     }
@@ -459,6 +487,13 @@ fn hide_popup_now(app: &AppHandle) {
 #[tauri::command]
 fn hide_popup(app: AppHandle) {
     hide_popup_now(&app);
+}
+
+#[tauri::command]
+fn begin_move(state: tauri::State<AppState>) {
+    state
+        .ignore_blur_until
+        .store(unix_ms() as u64 + 5_000, Ordering::SeqCst);
 }
 
 fn open_store() -> Result<Store, String> {

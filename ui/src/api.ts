@@ -51,6 +51,7 @@ export type CliptraceApi = {
   clipText: (id: number) => Promise<string>;
   copyClip: (id: number) => Promise<void>;
   hidePopup: () => Promise<void>;
+  startDrag: () => Promise<void>;
   status: () => Promise<AppStatus>;
   onClipsChanged: (cb: () => void) => Promise<() => void>;
   onStatusChanged: (cb: (s: AppStatus) => void) => Promise<() => void>;
@@ -82,6 +83,11 @@ export function createTauriApi(invoke: Invoke): CliptraceApi {
     clipText: (id) => invoke<string>("clip_text", { id }),
     copyClip: (id) => invoke("copy_clip", { id }),
     hidePopup: () => invoke("hide_popup"),
+    startDrag: async () => {
+      await invoke("begin_move");
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().startDragging();
+    },
     status: () => invoke<AppStatus>("status"),
     onClipsChanged: async (cb) => {
       const { listen } = await import("@tauri-apps/api/event");
