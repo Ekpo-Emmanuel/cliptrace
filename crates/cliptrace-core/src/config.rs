@@ -49,6 +49,7 @@ pub struct Paths {
     pub data_dir: PathBuf,
     pub db_path: PathBuf,
     pub config_path: PathBuf,
+    pub models_dir: PathBuf,
 }
 
 impl Paths {
@@ -59,15 +60,18 @@ impl Paths {
     pub fn from_data_dir(data_dir: PathBuf) -> Self {
         let db_path = data_dir.join("cliptrace.db");
         let config_path = data_dir.join("config.toml");
+        let models_dir = data_dir.join("models");
         Self {
             data_dir,
             db_path,
             config_path,
+            models_dir,
         }
     }
 
     pub fn ensure_data_dir(&self) -> Result<(), ConfigError> {
         fs::create_dir_all(&self.data_dir)?;
+        fs::create_dir_all(&self.models_dir)?;
         Ok(())
     }
 }

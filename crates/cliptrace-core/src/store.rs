@@ -5,7 +5,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-const SEARCH_TEXT_CHARS: usize = 2000;
+pub const SEARCH_TEXT_CHARS: usize = 2000;
+pub const EMBED_DIMS: usize = 384;
+pub const EMBED_MODEL: &str = "bge-small-en-v1.5";
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS clips (
@@ -36,6 +38,11 @@ CREATE TRIGGER IF NOT EXISTS clips_au AFTER UPDATE ON clips BEGIN
   INSERT INTO clips_fts(clips_fts, rowid, search_text) VALUES('delete', old.id, old.search_text);
   INSERT INTO clips_fts(rowid, search_text) VALUES (new.id, new.search_text);
 END;
+CREATE TABLE IF NOT EXISTS clip_embeddings (
+  clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  embedding BLOB NOT NULL
+);
 "#;
 
 #[derive(Debug, Error)]
@@ -46,6 +53,18 @@ pub enum StoreError {
     Sqlite(#[from] rusqlite::Error),
     #[error("clip {0} not found")]
     NotFound(i64),
+    #[error("embedding error: {0}")]
+    Embedding(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct StoredEmbedding {
+    pub clip_id: i64,
+    pub last_seen_at: i64,
+    pub source_exe: String,
+    pub preview: String,
+    pub model: String,
+    pub embedding: Vec<f32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +98,7 @@ impl Store {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(db_path)?;
+        conn.pragma_update(None, "foreign_keys", true)?;
         conn.execute_batch(SCHEMA)?;
         Ok(Self { conn })
     }
@@ -170,6 +190,153 @@ impl Store {
             .flatten();
         content.ok_or(StoreError::NotFound(id))
     }
+
+    pub fn clip_search_text(&self, id: i64) -> Result<String, StoreError> {
+        self.conn
+            .query_row(
+                "SELECT search_text FROM clips WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(|_| StoreError::NotFound(id))
+    }
+
+    pub fn clips_missing_embeddings(&self) -> Result<Vec<(i64, String)>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.search_text
+             FROM clips c
+             LEFT JOIN clip_embeddings e ON e.clip_id = c.id
+             WHERE e.clip_id IS NULL
+             ORDER BY c.id",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn upsert_embedding(&self, id: i64, vector: &[f32]) -> Result<(), StoreError> {
+        if vector.len() != EMBED_DIMS {
+            return Err(StoreError::Embedding(format!(
+                "embedding len {} != {EMBED_DIMS}",
+                vector.len()
+            )));
+        }
+        let normalized = l2_normalize(vector).ok_or_else(|| {
+            StoreError::Embedding("cannot L2-normalize a zero vector".into())
+        })?;
+        let blob = f32_le_blob(&normalized);
+        self.conn.execute(
+            "INSERT INTO clip_embeddings(clip_id, model, embedding) VALUES (?1, ?2, ?3)
+             ON CONFLICT(clip_id) DO UPDATE SET model = excluded.model, embedding = excluded.embedding",
+            params![id, EMBED_MODEL, blob],
+        )?;
+        Ok(())
+    }
+
+    /// `range` is inclusive `last_seen_at` in unix ms: `(start_ms, end_ms)`.
+    pub fn list_embeddings(
+        &self,
+        range: Option<(i64, i64)>,
+    ) -> Result<Vec<StoredEmbedding>, StoreError> {
+        let sql = "SELECT e.clip_id, c.last_seen_at, COALESCE(c.source_exe, ''),
+                          COALESCE(c.content, ''), e.model, e.embedding
+                   FROM clip_embeddings e
+                   JOIN clips c ON c.id = e.clip_id
+                   WHERE (?1 IS NULL OR c.last_seen_at >= ?1)
+                     AND (?2 IS NULL OR c.last_seen_at <= ?2)";
+        let (start, end) = match range {
+            Some((s, e)) => (Some(s), Some(e)),
+            None => (None, None),
+        };
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params![start, end], |row| {
+            let blob: Vec<u8> = row.get(5)?;
+            let content: String = row.get(3)?;
+            Ok(StoredEmbedding {
+                clip_id: row.get(0)?,
+                last_seen_at: row.get(1)?,
+                source_exe: row.get(2)?,
+                preview: content.chars().take(60).collect(),
+                model: row.get(4)?,
+                embedding: f32_le_from_blob(&blob),
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn search_vector(&self, vector: &[f32], limit: usize) -> Result<Vec<SearchHit>, StoreError> {
+        if vector.len() != EMBED_DIMS {
+            return Err(StoreError::Embedding(format!(
+                "query embedding len {} != {EMBED_DIMS}",
+                vector.len()
+            )));
+        }
+        let query = l2_normalize(vector).ok_or_else(|| {
+            StoreError::Embedding("cannot L2-normalize a zero query vector".into())
+        })?;
+        let rows = self.list_embeddings(None)?;
+        let scored: Vec<(f32, &StoredEmbedding)> = rows
+            .iter()
+            .filter(|row| row.embedding.len() == EMBED_DIMS)
+            .map(|row| (dot(&query, &row.embedding), row))
+            .collect();
+        let ranked = rank_by_score(scored, limit);
+        Ok(ranked
+            .into_iter()
+            .map(|row| SearchHit {
+                id: row.clip_id,
+                last_seen_at: row.last_seen_at,
+                source_exe: row.source_exe.clone(),
+                preview: row.preview.clone(),
+            })
+            .collect())
+    }
+}
+
+pub fn l2_normalize(vector: &[f32]) -> Option<Vec<f32>> {
+    let norm = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm == 0.0 {
+        return None;
+    }
+    Some(vector.iter().map(|x| x / norm).collect())
+}
+
+pub fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+/// Higher score first. Ties keep input order.
+pub fn rank_by_score<'a>(
+    mut scored: Vec<(f32, &'a StoredEmbedding)>,
+    limit: usize,
+) -> Vec<&'a StoredEmbedding> {
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored
+        .into_iter()
+        .take(limit.max(1))
+        .map(|(_, row)| row)
+        .collect()
+}
+
+fn f32_le_blob(vector: &[f32]) -> Vec<u8> {
+    let mut blob = Vec::with_capacity(vector.len() * 4);
+    for value in vector {
+        blob.extend_from_slice(&value.to_le_bytes());
+    }
+    blob
+}
+
+fn f32_le_from_blob(blob: &[u8]) -> Vec<f32> {
+    blob.chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
 }
 
 pub fn normalize_text(text: &str) -> String {
@@ -313,6 +480,62 @@ mod tests {
         assert_eq!(limited.len(), 1);
         assert_eq!(limited[0].id, many_id);
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn axis(dim: usize) -> Vec<f32> {
+        let mut v = vec![0.0f32; EMBED_DIMS];
+        v[dim] = 1.0;
+        v
+    }
+
+    fn dummy_row(id: i64, embedding: Vec<f32>) -> StoredEmbedding {
+        StoredEmbedding {
+            clip_id: id,
+            last_seen_at: 0,
+            source_exe: String::new(),
+            preview: String::new(),
+            model: "test".into(),
+            embedding,
+        }
+    }
+
+    #[test]
+    fn cosine_ranks_hand_built_vectors() {
+        let query = axis(0);
+        let near = dummy_row(1, axis(0));
+        let mid = dummy_row(2, l2_normalize(&{
+            let mut v = vec![0.0f32; EMBED_DIMS];
+            v[0] = 0.8;
+            v[1] = 0.2;
+            v
+        }).unwrap());
+        let far = dummy_row(3, axis(1));
+        let scored = vec![
+            (dot(&query, &far.embedding), &far),
+            (dot(&query, &near.embedding), &near),
+            (dot(&query, &mid.embedding), &mid),
+        ];
+        let ranked = rank_by_score(scored, 3);
+        assert_eq!(ranked[0].clip_id, 1);
+        assert_eq!(ranked[1].clip_id, 2);
+        assert_eq!(ranked[2].clip_id, 3);
+
+        let (dir, store) = temp_db();
+        let a = store.upsert_clip(&clip("axis zero"), 1_000).unwrap();
+        let b = store.upsert_clip(&clip("axis one"), 2_000).unwrap();
+        let UpsertOutcome::Inserted { id: id_a } = a else { panic!("a") };
+        let UpsertOutcome::Inserted { id: id_b } = b else { panic!("b") };
+        assert_eq!(store.clips_missing_embeddings().unwrap().len(), 2);
+        store.upsert_embedding(id_a, &axis(0)).unwrap();
+        store.upsert_embedding(id_b, &axis(1)).unwrap();
+        assert!(store.clips_missing_embeddings().unwrap().is_empty());
+        let in_range = store.list_embeddings(Some((1_500, 2_500))).unwrap();
+        assert_eq!(in_range.len(), 1);
+        assert_eq!(in_range[0].clip_id, id_b);
+        let hits = store.search_vector(&axis(0), 2).unwrap();
+        assert_eq!(hits[0].id, id_a);
+        assert_eq!(hits[1].id, id_b);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

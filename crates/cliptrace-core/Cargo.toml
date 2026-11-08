@@ -3,8 +3,13 @@ name = "cliptrace-core"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+embeddings = ["dep:fastembed"]
+
 [dependencies]
 dirs = "5"
+fastembed = { version = "5", optional = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

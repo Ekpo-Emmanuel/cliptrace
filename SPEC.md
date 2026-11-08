@@ -21,15 +21,15 @@ Every copy is stored and indexed on-device, so you can type
 | Language | Rust (stable) |
 | Workspace | `cliptrace-core` (lib), `cliptrace-cli` (bin), `src-tauri` (M7 only) |
 | Win32 | `windows` crate |
-| DB | SQLite via `rusqlite` (bundled) + FTS5 + `sqlite-vec` |
+| DB | SQLite via `rusqlite` (bundled) + FTS5; embeddings in `clip_embeddings` BLOB |
 | Embeddings | `fastembed` with `bge-small-en-v1.5` (384 dims) |
 | Time parsing | `chrono` + small custom parser in `timeparse.rs` |
 | Secret storage | DPAPI (`CryptProtectData`) per-value encryption |
 | Config | `toml` + `serde`, paths via `dirs` |
 | UI (last) | Tauri v2, plain TS or Svelte |
 
-Fallback: if `ort`/ONNX or `sqlite-vec` loading blocks progress for more than
-~90 minutes, stop and propose a switch to C#/.NET 8. Architecture is identical.
+Fallback: if `ort`/ONNX loading blocks progress for more than ~90 minutes,
+stop and propose a switch to C#/.NET 8. Architecture is identical.
 
 ## Data location
 Root: `%LOCALAPPDATA%\Cliptrace\` (override with env var `CLIPTRACE_DATA_DIR` for dev/tests)
@@ -79,7 +79,11 @@ CREATE TABLE clips (
 CREATE VIRTUAL TABLE clips_fts USING fts5(
   search_text, content='clips', content_rowid='id', tokenize='porter unicode61'
 );
-CREATE VIRTUAL TABLE clip_vec USING vec0(embedding float[384]);  -- rowid = clips.id
+CREATE TABLE clip_embeddings (
+  clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,                    -- e.g. bge-small-en-v1.5
+  embedding BLOB NOT NULL                 -- 384 little-endian f32, L2-normalized
+);
 ```
 - Dedupe: on hash match, bump `last_seen_at` and `copy_count`; do not insert a new row.
 - `search_text` for normal clips = content (truncated to ~2k chars for embedding).
@@ -89,13 +93,15 @@ CREATE VIRTUAL TABLE clip_vec USING vec0(embedding float[384]);  -- rowid = clip
 ### embed (M4)
 - `fastembed` bge-small, model cached in `models\`.
 - Embed on a background worker so capture never blocks.
+- Store L2-normalized 384-d vectors in `clip_embeddings` (no sqlite-vec).
+- Vector search is brute-force cosine (dot product of L2-normalized vectors).
 - `cliptrace backfill` embeds any clip missing a vector.
 
 ### search (M3, M5)
 1. `timeparse` extracts a time range from the query ("tuesday", "yesterday",
    "last week", "this morning", "3 days ago") and returns the remaining text.
    Bare weekday = most recent past occurrence.
-2. Run FTS5 (BM25) and vector KNN over the remaining text, both filtered by the time range.
+2. Run FTS5 (BM25) and brute-force cosine over `clip_embeddings`, both filtered by the time range.
 3. Merge with reciprocal rank fusion (k = 60). Return top 5: id, time, source app,
    preview (secrets shown masked, e.g. `sk_live_••••••••`).
 4. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
