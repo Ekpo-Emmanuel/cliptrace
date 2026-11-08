@@ -9,7 +9,10 @@ embeddings = ["dep:fastembed"]
 
 [dependencies]
 dirs = "5"
-fastembed = { version = "5", optional = true }
+fastembed = { version = "5", optional = true, default-features = false, features = [
+    "ort-load-dynamic",
+    "hf-hub-native-tls",
+] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
