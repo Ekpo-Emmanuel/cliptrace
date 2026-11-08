@@ -743,10 +743,12 @@ export default function App() {
                   pickIds={pickIds}
                   onSelect={(index) => {
                     selectRow(index);
-                    // A click copies the clip, like Enter. While clips are
-                    // checked for a bulk action, a click only moves the cursor.
+                    // A click copies the clip. Quick paste closes afterwards, like
+                    // Enter; full view stays open so the preview can be read.
+                    // While clips are checked for a bulk action, a click only
+                    // moves the cursor.
                     const id = cards[index]?.id;
-                    if (!pickIds.length && id != null) void copy(id, true);
+                    if (!pickIds.length && id != null) void copy(id, compact);
                   }}
                   onTogglePick={togglePick}
                   compact={compact}
