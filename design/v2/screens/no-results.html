@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptrace — No results (full view)</title>
+<script>
+(function(){var d=document.documentElement,q=new URLSearchParams(location.search).get('theme'),t=q;
+try{t=t||localStorage.getItem('cliptrace-theme')}catch(e){}
+d.setAttribute('data-theme',t==='light'?'light':'dark');
+window.ctToggle=function(){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);try{localStorage.setItem('cliptrace-theme',n)}catch(e){}};})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&amp;family=Martian+Mono:wght@300;400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tr{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206}
+.tr,.tr button,.tr input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tr button{cursor:pointer}
+.tr .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tr :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tr .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tr input::placeholder{color:var(--faint)}
+.tr .wm{font-weight:800;font-size:19px;letter-spacing:-0.03em;line-height:1}
+.tr .seg{flex:none;display:flex;align-items:center;gap:2px;height:30px;padding:2px;box-sizing:border-box;border:1px solid var(--line);border-radius:4px}
+.tr .flt{height:24px;padding:0 10px;border:0;border-radius:2px;background:transparent;color:var(--faint);font-family:'Martian Mono',monospace;font-size:10.5px;display:inline-flex;align-items:center;gap:7px}
+.tr .flt:hover{color:var(--text)}
+.tr .flt.on{color:var(--text);background:var(--raise)}
+.tr .flt .dot{width:5px;height:5px;border-radius:50%;border:1px solid var(--line)}
+.tr .flt .dia{width:5px;height:5px;transform:rotate(45deg);border:1px solid var(--line);border-radius:1px}
+.tr .flt.on .dot,.tr .flt.on .dia{background:var(--accent);border-color:var(--accent);box-shadow:0 0 6px var(--accent)}
+.tr .flt .c{color:var(--faint)}
+.tr .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:3px;background:transparent;color:var(--muted);text-decoration:none}
+.tr .ico:hover{background:var(--raise);color:var(--accent)}
+.tr .key{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--muted)}
+.tr .gh{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 14px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--text);font-size:14px;font-weight:500;text-decoration:none}
+.tr .gh:hover{background:var(--raise);color:var(--text);border-color:var(--faint)}
+.tr .sp{position:relative}
+.tr .sp .solid{position:absolute;left:50%;top:0;height:46px;width:1px;transform:translateX(-50%);background:var(--line)}
+.tr .sp .after{position:absolute;left:50%;top:76px;bottom:0;width:1px;transform:translateX(-50%);background:repeating-linear-gradient(to bottom,var(--line) 0 3px,transparent 3px 9px);-webkit-mask-image:linear-gradient(#000,transparent 60%);mask-image:linear-gradient(#000,transparent 60%)}
+.tr .cut{position:absolute;left:50%;top:61px;width:14px;height:14px;transform:translate(-50%,-50%);color:var(--accent)}
+.tr .stage{position:relative;overflow:hidden}
+.tr .stage::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,var(--line) 1px,transparent 1.3px);background-size:20px 20px;-webkit-mask-image:linear-gradient(200deg,#000 0%,transparent 70%);mask-image:linear-gradient(200deg,#000 0%,transparent 70%);pointer-events:none}
+.tr .ghost{position:absolute;right:-6px;top:-50px;font-size:250px;font-weight:800;letter-spacing:-0.06em;line-height:1;color:transparent;-webkit-text-stroke:1px var(--line);pointer-events:none;user-select:none}
+.tr .tip{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line)}
+.tr .tip code{font-family:'Martian Mono',monospace;font-size:11.5px;color:var(--accent)}
+.tr .tip span{font-size:14px;color:var(--muted)}
+</style>
+<style>
+html{--accent-t:#FFB547;--page:#0B0A08}
+html[data-theme=light]{--accent-t:#985400;--page:#E4DED2}
+html[data-theme=light] .tr,html[data-theme=light] .tq{--bg:#F5F1E8;--panel:#ECE6D9;--raise:#E3DCCB;--line:#D3CABA;--text:#1C1813;--muted:#4F483D;--faint:#6E6556;--ink:#FFF9EF;--bad:#B4321F}
+html[data-theme=light] .tr .scrim,html[data-theme=light] .tq .scrim{background:rgba(40,32,20,.42)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--page) !important;padding:48px 24px;box-sizing:border-box}
+.ct-theme{position:fixed;top:14px;right:14px;font:500 11px 'Martian Mono',ui-monospace,monospace;padding:7px 11px;border-radius:3px;border:1px solid rgba(128,120,100,.45);background:transparent;color:#8C8474;cursor:pointer}
+</style>
+</head>
+<body>
+<button class="ct-theme" type="button" onclick="ctToggle()">light / dark</button>
+<div class="tr" style="--accent: var(--accent-t); width: 880px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--line)">
+<span class="wm" aria-label="Cliptrace">clip<span style="color: var(--accent)">trace</span></span>
+<span aria-hidden="true" style="width: 1px; height: 22px; background: var(--line)"></span>
+<label for="nr-search" class="sr">Search clips</label>
+<input id="nr-search" type="search" placeholder="Search the trace…" value="invoice march" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; letter-spacing: -0.01em; color: var(--text); outline: none">
+<a class="ico" href="recent.html" aria-label="Clear search" title="Clear search (Esc)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+<div role="group" aria-label="Show" class="seg">
+<button type="button" class="flt on" aria-pressed="true"><span class="dot" aria-hidden="true"></span>all<span class="c">0</span></button>
+<button type="button" class="flt" aria-pressed="false"><span class="dia" aria-hidden="true"></span>pinned<span class="c">0</span></button>
+</div>
+<a class="ico" href="no-results-compact.html" aria-label="Collapse to quick paste" title="Collapse to quick paste (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg></a>
+</header>
+
+<div style="display: flex; flex: 1; min-height: 0">
+
+<nav aria-label="Search results, none" style="width: 344px; flex: none; border-right: 1px solid var(--line); display: grid; grid-template-columns: 58px 26px minmax(0, 1fr)">
+<span></span>
+<span class="sp" aria-hidden="true">
+<span class="solid"></span>
+<svg class="cut" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
+<span class="after"></span>
+</span>
+<div style="padding: 20px 16px 0 12px; display: flex; flex-direction: column; gap: 26px">
+<span class="m" style="font-size: 10px; color: var(--faint)">0 of 109 match</span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 14.5px; font-weight: 500; color: var(--muted)">The trace comes up empty</span>
+<span class="m" style="font-size: 9.5px; line-height: 1.7; color: var(--faint)">searched text, window titles,<br>app names and tags</span>
+</div>
+</div>
+</nav>
+
+<section aria-label="No results" class="stage" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 26px; padding: 34px 36px 30px">
+<span class="ghost" aria-hidden="true">0</span>
+<div style="position: relative; display: flex; flex-direction: column; gap: 12px">
+<span class="m" style="font-size: 10px; color: var(--accent)">search · no results</span>
+<h1 style="margin: 0; font-size: 40px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.04; font-variation-settings: 'opsz' 96">No clips match<br><span style="color: var(--accent)">“invoice march”</span></h1>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 4px">
+<span class="m" style="font-size: 9.5px; color: var(--faint); padding-bottom: 6px">narrow it down another way</span>
+<div style="border-top: 1px solid var(--line)">
+<div class="tip"><code>app:chrome</code><span>Only clips copied from Chrome</span></div>
+<div class="tip"><code>#meeting</code><span>Clips with that tag</span></div>
+<div class="tip"><code>fewer words</code><span>Every word has to match, so try just one</span></div>
+</div>
+<span style="display: flex; align-items: center; gap: 8px; padding-top: 12px; font-size: 12.5px; color: var(--faint)"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Secrets are never searched.</span>
+</div>
+
+<div style="position: relative; margin-top: auto">
+<a class="gh" href="recent.html">Clear search<span class="key">Esc</span></a>
+</div>
+</section>
+</div>
+</div>
+</body>
+</html>

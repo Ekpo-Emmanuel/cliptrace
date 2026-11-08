@@ -1,7 +1,19 @@
-export function DayHeader({ label }: { label: string }) {
+export function DayHeader({
+  label,
+  lit,
+  compact = false,
+}: {
+  label: string;
+  lit: boolean;
+  compact?: boolean;
+}) {
   return (
-    <p className="font-label-xs bg-surface-container-lowest px-3 py-1.5 text-on-surface-variant">
-      {label}
-    </p>
+    <div className={`tday ${compact ? "q" : ""}`}>
+      <span />
+      <span className="tspine h-full">
+        {lit ? <span className="tlit bottom-0" /> : null}
+      </span>
+      <span>{label}</span>
+    </div>
   );
 }

@@ -11,9 +11,14 @@ import {
   Keyboard,
   Link,
   Lock,
+  Maximize2,
+  Minimize2,
   Plus,
   Pin,
   Search,
+  Settings,
+  Sun,
+  Moon,
   Shield,
   Sparkles,
   Tag,
@@ -60,3 +65,9 @@ export const IconSearch = icon(Search);
 export const IconKeyboard = icon(Keyboard);
 export const IconCircleCheck = icon(CircleCheck);
 export const IconGauge = icon(Gauge);
+
+export const IconExpand = icon(Maximize2);
+export const IconCollapse = icon(Minimize2);
+export const IconSettings = icon(Settings);
+export const IconSun = icon(Sun);
+export const IconMoon = icon(Moon);

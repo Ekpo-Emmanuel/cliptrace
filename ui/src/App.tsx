@@ -14,7 +14,15 @@ import { KeyHints } from "./components/KeyHints";
 import { PreviewPane } from "./components/PreviewPane";
 import { SearchBar } from "./components/SearchBar";
 import { Tabs } from "./components/Tabs";
-import { IconShield } from "./icons";
+import { SecretDialog } from "./components/SecretDialog";
+import { SettingsPanel } from "./components/SettingsPanel";
+import {
+  applyTheme,
+  loadTheme,
+  useEffectiveTheme,
+  type Theme,
+} from "./lib/theme";
+import { ErrorStrip, UndoStrip } from "./components/Strip";
 
 type Tab = "recent" | "pinned";
 
@@ -23,7 +31,7 @@ export default function App() {
   const apiRef = useRef<CliptraceApi | null>(null);
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("recent");
-  const [cards, setCards] = useState<ClipCard[]>([]);
+  const [rawCards, setCards] = useState<ClipCard[]>([]);
   const [selected, setSelected] = useState(0);
   const [pickIds, setPickIds] = useState<number[]>([]);
   const [offset, setOffset] = useState(0);
@@ -52,6 +60,20 @@ export default function App() {
     ) => Promise<void>
   >(async () => {});
   const [copied, setCopied] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  useEffect(() => applyTheme(theme), [theme]);
+  const shownTheme = useEffectiveTheme(theme);
+  // Quick paste lists pinned clips first; selection and Alt 1-9 follow this order.
+  const cards = useMemo(
+    () =>
+      compact
+        ? [...rawCards.filter((c) => c.pinned), ...rawCards.filter((c) => !c.pinned)]
+        : rawCards,
+    [rawCards, compact],
+  );
+  const remapId = useRef<number | null>(null);
   const [errToast, setErrToast] = useState<string | null>(null);
   const [undoId, setUndoId] = useState<number | null>(null);
   const [fullText, setFullText] = useState<Record<number, string>>({});
@@ -143,6 +165,7 @@ export default function App() {
       });
     })();
     window.cliptraceOnOpen = (cache) => {
+      setSettingsOpen(false);
       setQuery("");
       setTab("recent");
       setPickIds([]);
@@ -267,7 +290,8 @@ export default function App() {
 
   async function togglePin(card = current) {
     if (!card || !apiRef.current) return;
-    const prev = cards;
+    const prev = rawCards;
+    remapId.current = current?.id ?? null;
     setCards((list) =>
       list.map((c) => (c.id === card.id ? { ...c, pinned: !c.pinned } : c)),
     );
@@ -281,7 +305,7 @@ export default function App() {
 
   async function addTag(tag: string) {
     if (!current || !apiRef.current) return;
-    const prev = cards;
+    const prev = rawCards;
     setCards((list) =>
       list.map((c) =>
         c.id === current.id ? { ...c, tags: [...c.tags, tag] } : c,
@@ -298,7 +322,7 @@ export default function App() {
 
   async function removeTag(tag: string) {
     if (!current || !apiRef.current) return;
-    const prev = cards;
+    const prev = rawCards;
     setCards((list) =>
       list.map((c) =>
         c.id === current.id
@@ -322,7 +346,7 @@ export default function App() {
 
   async function confirmMarkSecret() {
     if (!current || !apiRef.current) return;
-    const prev = cards;
+    const prev = rawCards;
     const id = current.id;
     setCards((list) =>
       list.map((c) =>
@@ -362,6 +386,44 @@ export default function App() {
     })();
   }
 
+  /** Pin every checked clip. If all are already pinned, unpin them instead. */
+  function pinPicked() {
+    const api = apiRef.current;
+    if (!pickIds.length || !api) return;
+    const picked = cards.filter((c) => pickIds.includes(c.id));
+    const pin = !picked.every((c) => c.pinned);
+    const prev = rawCards;
+    remapId.current = current?.id ?? null;
+    setCards((list) =>
+      list.map((c) => (pickIds.includes(c.id) ? { ...c, pinned: pin } : c)),
+    );
+    void (async () => {
+      try {
+        for (const c of picked) {
+          if (c.pinned !== pin) await api.setPinned(c.id, pin);
+        }
+        setPickIds([]);
+        void load(true, query, tab, true);
+      } catch (err) {
+        fail(prev, err instanceof Error ? err.message : "Pin failed");
+      }
+    })();
+  }
+
+  function moveSelection(to: number, extend = false) {
+    if (!cards.length) return;
+    const next = Math.max(0, Math.min(cards.length - 1, to));
+    if (extend) {
+      const ids = [cards[selected]?.id, cards[next]?.id].filter(
+        (x): x is number => x != null,
+      );
+      setPickIds((cur) => Array.from(new Set([...cur, ...ids])));
+    }
+    setSelected(next);
+    selectedId.current = cards[next]?.id ?? null;
+    if (next > cards.length - 8) void load(false);
+  }
+
   function askDelete() {
     if (!current || !apiRef.current) return;
     const saved = current;
@@ -393,11 +455,38 @@ export default function App() {
     void load(true, query, next);
   }
 
+  function toggleMode() {
+    const next = !compact;
+    remapId.current = current?.id ?? null;
+    setCompact(next);
+    void apiRef.current?.setMode(next);
+    window.setTimeout(() => document.getElementById("q")?.focus(), 0);
+  }
+
+  // After a reorder (mode switch, pin toggle) keep the same clip selected.
+  useEffect(() => {
+    const id = remapId.current;
+    if (id == null) return;
+    remapId.current = null;
+    const i = cards.findIndex((c) => c.id === id);
+    if (i >= 0) setSelected(i);
+  }, [cards]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tagFocus = document.activeElement?.id === "add-tag";
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen((open) => !open);
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
+        if (settingsOpen) {
+          setSettingsOpen(false);
+          document.getElementById("q")?.focus();
+          return;
+        }
         if (pickIds.length) {
           setPickIds([]);
           return;
@@ -413,6 +502,27 @@ export default function App() {
         void hideNow();
         return;
       }
+      if (settingsOpen) return;
+      if (confirmSecret) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void confirmMarkSecret();
+        }
+        return;
+      }
+      if (e.key === "Tab" && !tagFocus && suggest.length === 0) {
+        e.preventDefault();
+        toggleMode();
+        return;
+      }
+      if (compact && e.altKey && /^[1-9]$/.test(e.key)) {
+        const card = cards[Number(e.key) - 1];
+        if (card) {
+          e.preventDefault();
+          void copy(card.id, true);
+        }
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "1") {
         e.preventDefault();
         changeTab("recent");
@@ -423,7 +533,55 @@ export default function App() {
         changeTab("pinned");
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        document.getElementById("q")?.focus();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "d"
+      ) {
+        e.preventDefault();
+        setTheme(shownTheme === "dark" ? "light" : "dark");
+        return;
+      }
       if (tagFocus) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && undoId != null) {
+        e.preventDefault();
+        undoDelete();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.code === "Space") {
+        e.preventDefault();
+        if (current) togglePick(current.id);
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "a" &&
+        !query.trim()
+      ) {
+        e.preventDefault();
+        setPickIds(cards.map((c) => c.id));
+        return;
+      }
+      if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        moveSelection(selected + (e.key === "ArrowDown" ? 1 : -1), true);
+        return;
+      }
+      if (e.key === "PageDown" || e.key === "PageUp") {
+        e.preventDefault();
+        moveSelection(selected + (e.key === "PageDown" ? 6 : -6));
+        return;
+      }
+      if ((e.key === "Home" || e.key === "End") && !query) {
+        e.preventDefault();
+        moveSelection(e.key === "Home" ? 0 : cards.length - 1);
+        return;
+      }
       if (suggest.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
         e.preventDefault();
         setSuggestIndex((i) =>
@@ -442,7 +600,8 @@ export default function App() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        void togglePin();
+        if (pickIds.length) pinPicked();
+        else void togglePin();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "t") {
@@ -456,8 +615,15 @@ export default function App() {
         return;
       }
       if (e.key === "Delete" && document.activeElement?.id === "q") {
+        // With text after the caret, Del edits the query instead of a clip.
+        const input = document.activeElement as HTMLInputElement;
+        const atEnd =
+          input.selectionStart === input.value.length &&
+          input.selectionEnd === input.value.length;
+        if (!pickIds.length && !atEnd) return;
         e.preventDefault();
-        askDelete();
+        if (pickIds.length) deletePicked();
+        else askDelete();
         return;
       }
       if (document.activeElement?.id !== "q") return;
@@ -487,9 +653,13 @@ export default function App() {
   }, [query, tab]);
 
   const frame = (
-    <div className="relative flex h-[500px] w-[680px] flex-col overflow-hidden rounded-lg bg-white">
+    <div
+      className={`relative flex flex-col overflow-hidden rounded-(--r-window) bg-(--bg) text-(--text) border border-[var(--line)] ${
+        compact ? "tq h-[440px] w-[380px]" : "tr h-[580px] w-[880px]"
+      }`}
+    >
       <div
-        className="flex h-3 shrink-0 cursor-grab items-center justify-center bg-white active:cursor-grabbing"
+        className="flex h-3 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
         aria-label="Move window"
         onMouseDown={(e) => {
           if (e.button !== 0) return;
@@ -497,27 +667,37 @@ export default function App() {
           void apiRef.current?.startDrag();
         }}
       >
-        <span className="pointer-events-none h-0.5 w-8 rounded-full bg-outline-variant/50" />
+        <span className="pointer-events-none h-0.5 w-8 rounded-full bg-(--line)" />
       </div>
-      {paused ? (
-        <div className="font-label-md flex items-center gap-2 bg-tertiary-container px-space-md py-1 text-on-tertiary-container">
-          <IconShield className="h-3.5 w-3.5" />
-          Capture paused
-        </div>
-      ) : null}
       {note?.startsWith("keyword-only") ? (
-        <div className="font-label-md flex items-center gap-2 bg-secondary-container px-space-md py-1 text-on-secondary-container">
-          Keyword-only search
+        <div
+          className="px-4 py-1 font-mono text-[10px]"
+          style={{ color: "var(--faint)" }}
+        >
+          keyword-only search · embeddings unavailable
         </div>
       ) : null}
-      <div className="px-space-md pt-space-sm">
+      <div className="relative">
+        {pickIds.length > 0 ? (
+          <PickBar
+            count={pickIds.length}
+            total={cards.length}
+            onSelectAll={() => setPickIds(cards.map((c) => c.id))}
+            onClear={() => setPickIds([])}
+            onDelete={deletePicked}
+          />
+        ) : null}
         <SearchBar
+          paused={paused}
           value={query}
           onChange={schedule}
           onClear={() => schedule("")}
           suggest={suggest}
           suggestIndex={suggestIndex}
           onPickSuggest={pickSuggest}
+          compact={compact}
+          onToggleMode={toggleMode}
+          onSettings={() => setSettingsOpen(true)}
           trailing={
             <Tabs
               tab={tab}
@@ -528,105 +708,115 @@ export default function App() {
           }
         />
       </div>
-      <div className="relative mt-space-xs min-h-0 flex-1 overflow-hidden bg-white">
+      <div className="relative mt-space-xs min-h-0 flex-1 overflow-hidden">
         {cards.length === 0 ? (
-          <EmptyState kind={emptyKind} query={query} onExample={schedule} />
+          <EmptyState
+            kind={emptyKind}
+            query={query}
+            total={total}
+            compact={compact}
+            onClear={() => schedule("")}
+            onBrowse={() => changeTab("recent")}
+          />
         ) : (
-          <div className="grid h-full min-h-0 grid-cols-[minmax(0,45%)_minmax(0,55%)] bg-white">
+          <div
+            className={`grid h-full min-h-0 ${
+              compact
+                ? "grid-cols-[minmax(0,1fr)]"
+                : "grid-cols-[minmax(0,344px)_minmax(0,1fr)]"
+            }`}
+          >
             <div className="flex min-h-0 flex-col">
-              {pickIds.length > 0 ? (
-                <PickBar
-                  count={pickIds.length}
-                  total={cards.length}
-                  onSelectAll={() => setPickIds(cards.map((c) => c.id))}
-                  onClear={() => setPickIds([])}
-                  onDelete={deletePicked}
-                />
+              {paused ? (
+                <div className="paused-band" role="status">
+                  <span aria-hidden>❚❚</span>
+                  <span>
+                    <b style={{ color: "var(--text)" }}>Capture paused</b>
+                    {" · copies aren’t saved"}
+                  </span>
+                </div>
               ) : null}
               <div className="min-h-0 flex-1">
                 <ClipList
                   cards={cards}
                   selected={selected}
                   pickIds={pickIds}
-                  onSelect={selectRow}
-                  onTogglePick={togglePick}
-                  onPin={(card) => void togglePin(card)}
-                  onTag={(i) => {
-                    setSelected(i);
-                    queueMicrotask(() =>
-                      document.getElementById("add-tag")?.focus(),
-                    );
+                  onSelect={(index) => {
+                    selectRow(index);
+                    // A click copies the clip, like Enter. While clips are
+                    // checked for a bulk action, a click only moves the cursor.
+                    const id = cards[index]?.id;
+                    if (!pickIds.length && id != null) void copy(id, true);
                   }}
+                  onTogglePick={togglePick}
+                  compact={compact}
                   onMore={() => {
                     if (!done) void load(false);
                   }}
                 />
               </div>
             </div>
-            <PreviewPane
-              card={current}
-              allTags={allTags}
-              copied={copied}
-              onCopy={() => void copy()}
-              onPin={() => void togglePin()}
-              onSecret={askSecret}
-              onDelete={askDelete}
-              onAddTag={(t) => void addTag(t)}
-              onRemoveTag={(t) => void removeTag(t)}
-            />
+            {compact ? null : (
+              <PreviewPane
+                card={current}
+                position={selected + 1}
+                allTags={allTags}
+                copied={copied}
+                onCopy={() => void copy()}
+                onPin={() => void togglePin()}
+                onSecret={askSecret}
+                onDelete={askDelete}
+                onAddTag={(t) => void addTag(t)}
+                onRemoveTag={(t) => void removeTag(t)}
+              />
+            )}
           </div>
         )}
       </div>
       {undoId != null ? (
-        <div className="font-label-xs flex items-center gap-2 border-t border-outline-variant/30 bg-surface-container-low px-2.5 py-1.5 text-on-surface">
-          <span>Deleted</span>
-          <button
-            type="button"
-            className="font-label-xs ml-auto cursor-pointer text-primary hover:underline"
-            onClick={undoDelete}
-          >
-            Undo
-          </button>
-        </div>
+        <UndoStrip
+          key={undoId}
+          onUndo={undoDelete}
+          onDismiss={() => setUndoId(null)}
+        />
       ) : null}
       {errToast ? (
-        <div className="font-label-xs border-t border-outline-variant/30 bg-error-container px-2.5 py-1.5 text-on-error-container">
-          {errToast}
-        </div>
+        <ErrorStrip message={errToast} onDismiss={() => setErrToast(null)} />
       ) : null}
-      <KeyHints empty={cards.length === 0} />
+      <KeyHints
+        empty={cards.length === 0}
+        compact={compact}
+        theme={shownTheme}
+        onToggleTheme={() => setTheme(shownTheme === "dark" ? "light" : "dark")}
+      />
+      {settingsOpen ? (
+        <SettingsPanel
+          api={apiRef.current}
+          theme={theme}
+          onTheme={setTheme}
+          onClose={() => {
+            setSettingsOpen(false);
+            window.setTimeout(() => document.getElementById("q")?.focus(), 0);
+          }}
+          onError={(message) => {
+            setErrToast(message);
+            window.setTimeout(() => setErrToast(null), 2400);
+          }}
+        />
+      ) : null}
       {confirmSecret ? (
-        <div className="absolute inset-0 z-30 flex items-end justify-center bg-slate/40 p-space-md">
-          <div className="w-full max-w-sm rounded-md bg-surface-container-lowest p-space-md">
-            <p className="font-body-sm text-on-surface">
-              Mark as secret is one-way. Plaintext is encrypted and removed from
-              the database.
-            </p>
-            <div className="mt-space-sm flex justify-end gap-space-xs">
-              <button
-                type="button"
-                className="font-label-md rounded-md px-space-sm py-space-xs text-on-surface cursor-pointer"
-                onClick={() => setConfirmSecret(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="font-label-md rounded bg-accent px-space-sm  text-on-primary cursor-pointer"
-                onClick={() => void confirmMarkSecret()}
-              >
-                Mark as secret
-              </button>
-            </div>
-          </div>
-        </div>
+        <SecretDialog
+          specimen={current?.body ?? ""}
+          onCancel={() => setConfirmSecret(false)}
+          onConfirm={() => void confirmMarkSecret()}
+        />
       ) : null}
     </div>
   );
 
-  if (inApp) return <div className="h-full bg-white">{frame}</div>;
+  if (inApp) return <div className="h-full">{frame}</div>;
   return (
-    <div className="flex min-h-full items-center justify-center bg-surface-dim p-8">
+    <div className="flex min-h-full items-center justify-center bg-(--panel) p-8">
       {frame}
     </div>
   );

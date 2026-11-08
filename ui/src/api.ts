@@ -52,6 +52,9 @@ export type CliptraceApi = {
   copyClip: (id: number) => Promise<void>;
   hidePopup: () => Promise<void>;
   startDrag: () => Promise<void>;
+  setMode: (compact: boolean) => Promise<void>;
+  getSettings: () => Promise<Settings>;
+  updateSettings: (patch: SettingsPatch) => Promise<Settings>;
   status: () => Promise<AppStatus>;
   onClipsChanged: (cb: () => void) => Promise<() => void>;
   onStatusChanged: (cb: (s: AppStatus) => void) => Promise<() => void>;
@@ -83,6 +86,9 @@ export function createTauriApi(invoke: Invoke): CliptraceApi {
     clipText: (id) => invoke<string>("clip_text", { id }),
     copyClip: (id) => invoke("copy_clip", { id }),
     hidePopup: () => invoke("hide_popup"),
+    setMode: (compact) => invoke("set_popup_mode", { compact }),
+    getSettings: () => invoke<Settings>("get_settings"),
+    updateSettings: (patch) => invoke<Settings>("update_settings", { patch }),
     startDrag: async () => {
       await invoke("begin_move");
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -124,3 +130,22 @@ export function getApi(): Promise<CliptraceApi> {
   }
   return ready;
 }
+
+export type Settings = {
+  paused: boolean;
+  keyword_only: boolean;
+  hotkey: string;
+  secret_ttl_hours: number;
+  retention_days: number;
+  blocklist: string[];
+  autostart: boolean;
+  data_dir: string;
+  version: string;
+};
+
+export type SettingsPatch = Partial<
+  Pick<
+    Settings,
+    "paused" | "autostart" | "secret_ttl_hours" | "retention_days" | "blocklist"
+  >
+>;
