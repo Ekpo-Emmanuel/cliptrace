@@ -3,7 +3,6 @@ import { clock } from "../lib/time";
 
 type Props = {
   card: ClipCard;
-  number: number;
   selected: boolean;
   past: boolean;
   picked: boolean;
@@ -12,10 +11,9 @@ type Props = {
   onTogglePick: () => void;
 };
 
-/** Quick paste row: 46px, number 1-9 instead of a time column. */
+/** Quick paste row: 46px, no time column. */
 export function CompactRow({
   card,
-  number,
   selected,
   past,
   picked,
@@ -46,12 +44,7 @@ export function CompactRow({
         onSelect();
       }}
     >
-      <span
-        className="pt-3 pr-2 text-right font-mono text-[13px] font-medium"
-        style={{ color: selected ? "var(--accent)" : "var(--faint)" }}
-      >
-        {number <= 9 ? number : ""}
-      </span>
+      <span />
       <span className="tspine">
         {lit ? (
           <span
