@@ -1,14 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use cliptrace_core::{
     BrowseFilter, CaptureConfig, ClipCard, Embedder, NewClip, Store, UpsertOutcome, hybrid_search,
     load_or_create, run_listener, set_clipboard_text,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager};
@@ -31,6 +31,10 @@ struct AppState {
     pending_deletes: Arc<Mutex<Vec<i64>>>,
     ignore_blur_until: AtomicU64,
     focus_armed: AtomicBool,
+    pause_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    blocklist: Arc<RwLock<Vec<String>>>,
+    ttl_hours: Arc<AtomicU32>,
+    retention_days: Arc<AtomicU32>,
 }
 
 #[derive(Clone, Serialize)]
@@ -68,11 +72,17 @@ fn main() {
             let skip_clipboard = Arc::new(AtomicBool::new(false));
             let recent = Arc::new(Mutex::new(Vec::new()));
             let pending_deletes = Arc::new(Mutex::new(Vec::new()));
+            let blocklist = Arc::new(RwLock::new(Vec::new()));
+            let ttl_hours = Arc::new(AtomicU32::new(24));
+            let retention_days = Arc::new(AtomicU32::new(90));
             spawn_backend(
                 app.handle().clone(),
                 paused.clone(),
                 skip_clipboard.clone(),
                 recent.clone(),
+                blocklist.clone(),
+                ttl_hours.clone(),
+                retention_days.clone(),
             );
             app.manage(AppState {
                 embedder: Mutex::new(None),
@@ -83,6 +93,10 @@ fn main() {
                 pending_deletes: pending_deletes.clone(),
                 ignore_blur_until: AtomicU64::new(0),
                 focus_armed: AtomicBool::new(false),
+                pause_item: Mutex::new(None),
+                blocklist: blocklist.clone(),
+                ttl_hours: ttl_hours.clone(),
+                retention_days: retention_days.clone(),
             });
             build_tray(app.handle(), paused, keyword_only)?;
             spawn_hotkey_thread(app.handle().clone());
@@ -105,6 +119,9 @@ fn main() {
             copy_clip,
             hide_popup,
             begin_move,
+            set_popup_mode,
+            get_settings,
+            update_settings,
             status,
         ])
         .on_window_event(|window, event| {
@@ -168,11 +185,22 @@ fn spawn_backend(
     paused: Arc<AtomicBool>,
     skip_clipboard: Arc<AtomicBool>,
     recent: Arc<Mutex<Vec<ClipCard>>>,
+    blocklist: Arc<RwLock<Vec<String>>>,
+    ttl_hours: Arc<AtomicU32>,
+    retention_days: Arc<AtomicU32>,
 ) {
     std::thread::Builder::new()
         .name("cliptrace-capture".into())
         .spawn(move || {
-            if let Err(err) = run_backend(app, paused, skip_clipboard, recent) {
+            if let Err(err) = run_backend(
+                app,
+                paused,
+                skip_clipboard,
+                recent,
+                blocklist,
+                ttl_hours,
+                retention_days,
+            ) {
                 eprintln!("backend: {err}");
             }
         })
@@ -192,20 +220,39 @@ fn run_backend(
     paused: Arc<AtomicBool>,
     skip_clipboard: Arc<AtomicBool>,
     recent: Arc<Mutex<Vec<ClipCard>>>,
+    blocklist: Arc<RwLock<Vec<String>>>,
+    ttl_hours: Arc<AtomicU32>,
+    retention_days: Arc<AtomicU32>,
 ) -> anyhow::Result<()> {
     let paths = cliptrace_core::Paths::resolve()?;
     paths.ensure_data_dir()?;
     let config = load_or_create(&paths)?;
+    if let Ok(mut live) = blocklist.write() {
+        *live = config
+            .blocklist
+            .iter()
+            .map(|s| s.to_ascii_lowercase())
+            .collect();
+    }
     let store = Store::open(&paths.db_path)?;
-    let ttl = config.secret_ttl_hours;
-    let retention = config.retention_days;
-    let _ = store.purge(unix_ms(), retention, ttl);
+    ttl_hours.store(config.secret_ttl_hours, Ordering::SeqCst);
+    retention_days.store(config.retention_days, Ordering::SeqCst);
+    let _ = store.purge(
+        unix_ms(),
+        retention_days.load(Ordering::SeqCst),
+        ttl_hours.load(Ordering::SeqCst),
+    );
     refresh_recent(&store, &recent);
     let db_purge = paths.db_path.clone();
+    let (purge_ttl, purge_retention) = (ttl_hours.clone(), retention_days.clone());
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(3600));
         if let Ok(store) = Store::open(&db_purge) {
-            let _ = store.purge(unix_ms(), retention, ttl);
+            let _ = store.purge(
+                unix_ms(),
+                purge_retention.load(Ordering::SeqCst),
+                purge_ttl.load(Ordering::SeqCst),
+            );
         }
     });
 
@@ -216,10 +263,13 @@ fn run_backend(
         dll,
     );
 
+    let paused_for_capture = paused.clone();
     let recent_cache = recent.clone();
     run_listener(
         CaptureConfig {
-            blocklist: config.blocklist,
+            blocklist: Vec::new(),
+            live_blocklist: Some(blocklist),
+            paused: Some(paused_for_capture),
         },
         move |event| {
             if skip_clipboard.swap(false, Ordering::SeqCst) {
@@ -236,7 +286,7 @@ fn run_backend(
                     window_title: event.window_title,
                 },
                 now_ms,
-                ttl,
+                ttl_hours.load(Ordering::SeqCst),
             ) {
                 Ok(UpsertOutcome::Inserted { id }) | Ok(UpsertOutcome::Duplicate { id, .. }) => {
                     refresh_recent(&store, &recent_cache);
@@ -297,6 +347,11 @@ fn build_tray(
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &pause, &quit])?;
     let pause_item = pause.clone();
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut slot) = state.pause_item.lock() {
+            *slot = Some(pause.clone());
+        }
+    }
     TrayIconBuilder::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(true)
@@ -487,6 +542,21 @@ fn hide_popup_now(app: &AppHandle) {
 #[tauri::command]
 fn hide_popup(app: AppHandle) {
     hide_popup_now(&app);
+}
+
+/// Resize the popup between Full view (880x580) and Quick paste (380x440).
+#[tauri::command]
+fn set_popup_mode(app: AppHandle, compact: bool, state: tauri::State<AppState>) {
+    let Some(win) = app.get_webview_window("popup") else {
+        return;
+    };
+    // Resizing can fire a spurious blur; do not hide the popup because of it.
+    state
+        .ignore_blur_until
+        .store(unix_ms() as u64 + 800, Ordering::SeqCst);
+    let (width, height) = if compact { (380.0, 440.0) } else { (880.0, 580.0) };
+    let _ = win.set_size(tauri::LogicalSize::new(width, height));
+    let _ = win.center();
 }
 
 #[tauri::command]
@@ -712,6 +782,115 @@ fn status(state: tauri::State<AppState>) -> StatusDto {
         paused: state.paused.load(Ordering::SeqCst),
         keyword_only: state.keyword_only.load(Ordering::SeqCst),
     }
+}
+
+#[derive(Serialize)]
+struct SettingsDto {
+    paused: bool,
+    keyword_only: bool,
+    hotkey: String,
+    secret_ttl_hours: u32,
+    retention_days: u32,
+    blocklist: Vec<String>,
+    autostart: bool,
+    data_dir: String,
+    version: String,
+}
+
+#[derive(Deserialize, Default)]
+struct SettingsPatch {
+    paused: Option<bool>,
+    autostart: Option<bool>,
+    secret_ttl_hours: Option<u32>,
+    retention_days: Option<u32>,
+    blocklist: Option<Vec<String>>,
+}
+
+fn settings_dto(state: &AppState, config: &cliptrace_core::Config, data_dir: &std::path::Path) -> SettingsDto {
+    SettingsDto {
+        paused: state.paused.load(Ordering::SeqCst),
+        keyword_only: state.keyword_only.load(Ordering::SeqCst),
+        hotkey: config.hotkey.clone(),
+        secret_ttl_hours: config.secret_ttl_hours,
+        retention_days: config.retention_days,
+        blocklist: config.blocklist.clone(),
+        autostart: cliptrace_core::is_autostart_enabled(),
+        data_dir: data_dir.to_string_lossy().into_owned(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
+#[tauri::command]
+fn get_settings(state: tauri::State<AppState>) -> Result<SettingsDto, String> {
+    let paths = cliptrace_core::Paths::resolve().map_err(|e| e.to_string())?;
+    let config = load_or_create(&paths).map_err(|e| e.to_string())?;
+    Ok(settings_dto(&state, &config, &paths.data_dir))
+}
+
+#[tauri::command]
+fn update_settings(
+    app: AppHandle,
+    patch: SettingsPatch,
+    state: tauri::State<AppState>,
+) -> Result<SettingsDto, String> {
+    let paths = cliptrace_core::Paths::resolve().map_err(|e| e.to_string())?;
+    let mut config = load_or_create(&paths).map_err(|e| e.to_string())?;
+
+    if let Some(days) = patch.retention_days {
+        if !(1..=3650).contains(&days) {
+            return Err("History length must be 1 to 3650 days".into());
+        }
+        state.retention_days.store(days, Ordering::SeqCst);
+        config.retention_days = days;
+    }
+    if let Some(hours) = patch.secret_ttl_hours {
+        // u32::MAX means "never": keep secrets until the user deletes them.
+        if hours != cliptrace_core::SECRET_TTL_NEVER && !(1..=720).contains(&hours) {
+            return Err("Secret self-clear must be 1 to 720 hours, or never".into());
+        }
+        state.ttl_hours.store(hours, Ordering::SeqCst);
+        config.secret_ttl_hours = hours;
+    }
+    if let Some(list) = patch.blocklist {
+        let mut clean: Vec<String> = Vec::new();
+        for item in list {
+            let name = item.trim().to_lowercase();
+            if name.is_empty() || name.len() > 128 || clean.contains(&name) {
+                continue;
+            }
+            clean.push(name);
+        }
+        if clean.len() > 100 {
+            return Err("At most 100 ignored apps".into());
+        }
+        if let Ok(mut live) = state.blocklist.write() {
+            *live = clean.clone();
+        }
+        config.blocklist = clean;
+    }
+    if let Some(enabled) = patch.autostart {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        cliptrace_core::set_autostart(enabled, &exe).map_err(|e| e.to_string())?;
+        config.autostart = enabled;
+    }
+    cliptrace_core::save(&paths, &config).map_err(|e| e.to_string())?;
+
+    if let Some(now) = patch.paused {
+        state.paused.store(now, Ordering::SeqCst);
+        if let Ok(slot) = state.pause_item.lock() {
+            if let Some(item) = slot.as_ref() {
+                let _ = item.set_text(if now { "Resume capture" } else { "Pause capture" });
+            }
+        }
+        let _ = app.emit(
+            "status-changed",
+            StatusDto {
+                paused: now,
+                keyword_only: state.keyword_only.load(Ordering::SeqCst),
+            },
+        );
+    }
+    Ok(settings_dto(&state, &config, &paths.data_dir))
 }
 
 #[tauri::command]

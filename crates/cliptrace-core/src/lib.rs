@@ -12,7 +12,7 @@ pub mod timeparse;
 #[cfg(feature = "embeddings")]
 pub mod embed;
 
-pub use autostart::{AutostartError, set_autostart};
+pub use autostart::{AutostartError, is_autostart_enabled, set_autostart};
 pub use capture::{CaptureConfig, CaptureError, ClipEvent, run_listener, set_clipboard_text};
 pub use hybrid::{HybridOutcome, hybrid_search};
 pub use config::{Config, ConfigError, Paths, load_or_create, save};
@@ -27,7 +27,7 @@ pub use secrets::{
 };
 pub use search::{escape_fts_query, format_local_ms, fts_or_query, relative_time};
 pub use store::{
-    EMBED_DIMS, EMBED_MODEL, NewClip, RescanReport, SEARCH_TEXT_CHARS, SearchHit, Store, StoreError,
+    EMBED_DIMS, EMBED_MODEL, NewClip, RescanReport, SEARCH_TEXT_CHARS, SECRET_TTL_NEVER, SearchHit, Store, StoreError,
     ClipCard, StoredEmbedding, TagCount, UpsertOutcome, clip_hash, normalize_text,
 };
 pub use tags::{BrowseFilter, MAX_TAG_CHARS, MAX_TAGS_PER_CLIP, normalize_tag, parse_hash_tags};

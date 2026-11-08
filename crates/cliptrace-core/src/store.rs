@@ -1082,8 +1082,13 @@ fn hit_preview(is_secret: i64, kind: &str, hint: &str, content: &str) -> String 
     content.chars().take(60).collect()
 }
 
+/// Secret self-clear value meaning "keep until the user deletes it".
+pub const SECRET_TTL_NEVER: u32 = u32::MAX;
+
 fn secret_expiry(now_ms: i64, secret_ttl_hours: u32) -> i64 {
-    if secret_ttl_hours == 0 {
+    if secret_ttl_hours == SECRET_TTL_NEVER {
+        i64::MAX
+    } else if secret_ttl_hours == 0 {
         now_ms.saturating_sub(1)
     } else {
         now_ms.saturating_add(i64::from(secret_ttl_hours) * 3_600_000)
@@ -1296,6 +1301,13 @@ fn classify_kind(text: &str) -> &'static str {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn secret_expiry_hours_zero_and_never() {
+        assert_eq!(secret_expiry(1_000, 24), 1_000 + 24 * 3_600_000);
+        assert_eq!(secret_expiry(1_000, 0), 999);
+        assert_eq!(secret_expiry(1_000, SECRET_TTL_NEVER), i64::MAX);
+    }
 
     fn temp_db() -> (std::path::PathBuf, Store) {
         let n = SystemTime::now()
