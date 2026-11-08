@@ -6,9 +6,10 @@ use cliptrace_core::{
     EmbedWorker, Embedder, backfill_batch_size, backfill_sleep, run_embed_test, warn_once,
 };
 use cliptrace_core::{
-    CaptureConfig, NewClip, Paths, RRF_K, SearchHit, Store, UpsertOutcome, format_local_ms,
-    load_or_create, local_from_unix_ms, parse_time_phrase, rank_index, reciprocal_rank_fusion,
-    redact_secrets, relative_time, run_listener, set_clipboard_text,
+    BrowseFilter, CaptureConfig, NewClip, Paths, RRF_K, SearchHit, Store, UpsertOutcome,
+    format_local_ms, load_or_create, local_from_unix_ms, parse_hash_tags, parse_time_phrase,
+    rank_index, reciprocal_rank_fusion, redact_secrets, relative_time, run_listener,
+    set_clipboard_text,
 };
 
 fn main() -> Result<()> {
@@ -33,9 +34,17 @@ fn main() -> Result<()> {
         Some("scrub") => scrub_cmd(),
         Some("autostart") => autostart_cmd(true),
         Some("no-autostart") => autostart_cmd(false),
+        Some("pin") => pin_cmd(true, args.next().as_deref()),
+        Some("unpin") => pin_cmd(false, args.next().as_deref()),
+        Some("tag") => tag_cmd(true, args.next().as_deref(), args.next().as_deref()),
+        Some("untag") => tag_cmd(false, args.next().as_deref(), args.next().as_deref()),
+        Some("tags") => tags_cmd(),
+        Some("list") => list_cmd(&args.collect::<Vec<_>>()),
+        Some("mark-secret") => mark_secret_cmd(args.next().as_deref()),
+        Some("delete") => delete_cmd(args.next().as_deref()),
         _ => {
             eprintln!(
-                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id> | purge | rescan | scrub | autostart | no-autostart>"
+                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] [--pinned] [--tag X] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id> | purge | rescan | scrub | pin <id> | unpin <id> | tag <id> \"<tag>\" | untag <id> \"<tag>\" | tags | list [--pinned] [--tag X] [--offset N] [--limit N] | mark-secret <id> | delete <id> | autostart | no-autostart>"
             );
             std::process::exit(2);
         }
@@ -203,12 +212,18 @@ fn watch() -> Result<()> {
 fn search_cmd(args: &[String]) -> Result<()> {
     let opts = parse_search_args(args)?;
     let now_ms = unix_ms();
-    let parsed = parse_time_phrase(&opts.query, local_from_unix_ms(now_ms));
+    let (stripped, hash_tags) = parse_hash_tags(&opts.query);
+    let parsed = parse_time_phrase(&stripped, local_from_unix_ms(now_ms));
+    let mut filter = BrowseFilter {
+        pinned_only: opts.pinned,
+        tags: opts.tags,
+    };
+    filter.tags.extend(hash_tags);
     let store = open_store()?;
     let pool = opts.limit.max(50);
 
     let keyword_hits = store
-        .search_keyword(&parsed.text, pool, parsed.range)
+        .search_keyword_scoped(&parsed.text, pool, parsed.range, &filter)
         .context("fts5 search")?;
     let keyword_ids: Vec<i64> = keyword_hits.iter().map(|h| h.id).collect();
 
@@ -223,13 +238,14 @@ fn search_cmd(args: &[String]) -> Result<()> {
             Ok(Some(emb)) => {
                 used_vector = true;
                 vector_hits = store
-                    .search_vector(&emb.prefixed, pool, parsed.range)
+                    .search_vector_scoped(&emb.prefixed, pool, parsed.range, &filter)
                     .context("vector search")?;
                 vector_ids = vector_hits.iter().map(|h| h.id).collect();
                 if let Some(plain) = emb.plain {
-                    prefix_plain_ids = store.search_vector(&plain, 5, parsed.range).ok().map(|h| {
-                        h.into_iter().map(|x| x.id).collect()
-                    });
+                    prefix_plain_ids = store
+                        .search_vector_scoped(&plain, 5, parsed.range, &filter)
+                        .ok()
+                        .map(|h| h.into_iter().map(|x| x.id).collect());
                 }
             }
             Err(err) => {
@@ -290,6 +306,8 @@ struct SearchOpts {
     keyword_only: bool,
     vector_only: bool,
     explain: bool,
+    pinned: bool,
+    tags: Vec<String>,
 }
 
 struct Explain {
@@ -451,6 +469,12 @@ fn print_hits(hits: Vec<SearchHit>, now_ms: i64, explain: Option<&Explain>) -> R
             hit.source_exe,
             hit.preview
         );
+        if hit.pinned {
+            print!("\tpinned");
+        }
+        if !hit.tags.is_empty() {
+            print!("\t{}", hit.tags);
+        }
         if let Some(ex) = explain {
             let kr = rank_index(&ex.keyword_ids, hit.id);
             let vr = rank_index(&ex.vector_ids, hit.id);
@@ -471,12 +495,14 @@ fn parse_search_args(args: &[String]) -> Result<SearchOpts> {
     let mut keyword_only = false;
     let mut vector_only = false;
     let mut explain = false;
+    let mut pinned = false;
+    let mut tags = Vec::new();
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--limit" {
             i += 1;
             let Some(raw) = args.get(i) else {
-                bail!("Usage: cliptrace search [--limit N] [--keyword-only] [--vector-only] [--explain] <query>");
+                bail!("Usage: cliptrace search [--limit N] [--keyword-only] [--vector-only] [--explain] [--pinned] [--tag X] <query>");
             };
             limit = parse_limit(raw)?;
             i += 1;
@@ -492,6 +518,19 @@ fn parse_search_args(args: &[String]) -> Result<SearchOpts> {
         } else if args[i] == "--explain" {
             explain = true;
             i += 1;
+        } else if args[i] == "--pinned" {
+            pinned = true;
+            i += 1;
+        } else if args[i] == "--tag" {
+            i += 1;
+            let Some(raw) = args.get(i) else {
+                bail!("--tag needs a value");
+            };
+            tags.push(raw.clone());
+            i += 1;
+        } else if let Some(raw) = args[i].strip_prefix("--tag=") {
+            tags.push(raw.to_string());
+            i += 1;
         } else {
             query_parts.push(args[i].as_str());
             i += 1;
@@ -506,6 +545,8 @@ fn parse_search_args(args: &[String]) -> Result<SearchOpts> {
         keyword_only,
         vector_only,
         explain,
+        pinned,
+        tags,
     })
 }
 
@@ -584,6 +625,122 @@ fn app_exe_path() -> Result<std::path::PathBuf> {
     }
     let paths = Paths::resolve().context("resolve data dir")?;
     Ok(paths.data_dir.join("cliptrace-app.exe"))
+}
+
+fn parse_id(raw: Option<&str>, usage: &str) -> Result<i64> {
+    let Some(raw) = raw else {
+        bail!("{usage}");
+    };
+    raw.parse().context("id must be an integer")
+}
+
+fn pin_cmd(pin: bool, id_raw: Option<&str>) -> Result<()> {
+    let id = parse_id(id_raw, "Usage: cliptrace pin|unpin <id>")?;
+    let paths = open_paths()?;
+    let config = load_or_create(&paths).context("load config.toml")?;
+    let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    if pin {
+        store.pin_clip(id, unix_ms())?;
+        eprintln!("pinned id={id}");
+    } else {
+        store.unpin_clip(id, unix_ms(), config.secret_ttl_hours)?;
+        eprintln!("unpinned id={id}");
+    }
+    Ok(())
+}
+
+fn tag_cmd(add: bool, id_raw: Option<&str>, tag_raw: Option<&str>) -> Result<()> {
+    let id = parse_id(id_raw, "Usage: cliptrace tag|untag <id> \"<tag>\"")?;
+    let Some(tag) = tag_raw else {
+        bail!("Usage: cliptrace tag|untag <id> \"<tag>\"");
+    };
+    let store = open_store()?;
+    let tags = if add {
+        store.tag_clip(id, tag)?
+    } else {
+        store.untag_clip(id, tag)?
+    };
+    eprintln!("id={id} tags={}", tags.join(", "));
+    Ok(())
+}
+
+fn tags_cmd() -> Result<()> {
+    let store = open_store()?;
+    let tags = store.list_tags()?;
+    if tags.is_empty() {
+        eprintln!("no tags");
+        return Ok(());
+    }
+    for t in tags {
+        println!("{}\t{}", t.count, t.name);
+    }
+    Ok(())
+}
+
+fn list_cmd(args: &[String]) -> Result<()> {
+    let mut offset = 0i64;
+    let mut limit = 20i64;
+    let mut filter = BrowseFilter::default();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--pinned" {
+            filter.pinned_only = true;
+            i += 1;
+        } else if args[i] == "--tag" {
+            i += 1;
+            let Some(raw) = args.get(i) else {
+                bail!("--tag needs a value");
+            };
+            filter.tags.push(raw.clone());
+            i += 1;
+        } else if let Some(raw) = args[i].strip_prefix("--tag=") {
+            filter.tags.push(raw.to_string());
+            i += 1;
+        } else if args[i] == "--offset" {
+            i += 1;
+            let Some(raw) = args.get(i) else {
+                bail!("--offset needs a number");
+            };
+            offset = raw.parse().context("--offset")?;
+            i += 1;
+        } else if let Some(raw) = args[i].strip_prefix("--offset=") {
+            offset = raw.parse().context("--offset")?;
+            i += 1;
+        } else if args[i] == "--limit" {
+            i += 1;
+            let Some(raw) = args.get(i) else {
+                bail!("--limit needs a number");
+            };
+            limit = raw.parse().context("--limit")?;
+            i += 1;
+        } else if let Some(raw) = args[i].strip_prefix("--limit=") {
+            limit = raw.parse().context("--limit")?;
+            i += 1;
+        } else {
+            bail!("unknown list flag {}", args[i]);
+        }
+    }
+    let store = open_store()?;
+    print_hits(store.list_recent(offset, limit, &filter)?, unix_ms(), None)
+}
+
+fn mark_secret_cmd(id_raw: Option<&str>) -> Result<()> {
+    let id = parse_id(id_raw, "Usage: cliptrace mark-secret <id>")?;
+    let paths = open_paths()?;
+    let config = load_or_create(&paths).context("load config.toml")?;
+    let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    store.mark_secret(id, unix_ms(), config.secret_ttl_hours)?;
+    let preview = store.display_preview(id)?;
+    eprintln!("marked-secret id={id} {preview}");
+    Ok(())
+}
+
+fn delete_cmd(id_raw: Option<&str>) -> Result<()> {
+    let id = parse_id(id_raw, "Usage: cliptrace delete <id>")?;
+    let store = open_store()?;
+    store.delete_clip(id)?;
+    eprintln!("deleted id={id}");
+    Ok(())
 }
 
 fn unix_ms() -> i64 {

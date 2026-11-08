@@ -5,7 +5,9 @@ use crate::secrets::{
     SecretKind, detect_span, dpapi_protect, dpapi_unprotect, mask_secret, secret_hint,
     secret_search_text,
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use crate::tags::{BrowseFilter, MAX_TAGS_PER_CLIP, normalize_tag};
+use rusqlite::types::Value;
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -61,6 +63,12 @@ pub enum StoreError {
     Embedding(String),
     #[error("dpapi error: {0}")]
     Dpapi(String),
+    #[error("invalid tag")]
+    InvalidTag,
+    #[error("clip already has 10 tags")]
+    TooManyTags,
+    #[error("clip {0} is already a secret")]
+    AlreadySecret(i64),
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +87,14 @@ pub struct SearchHit {
     pub last_seen_at: i64,
     pub source_exe: String,
     pub preview: String,
+    pub tags: String,
+    pub pinned: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct TagCount {
+    pub name: String,
+    pub count: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,8 +124,8 @@ impl Store {
         conn.pragma_update(None, "foreign_keys", true)?;
         conn.pragma_update(None, "secure_delete", "ON")?;
         conn.execute_batch(SCHEMA)?;
-        ensure_fts_triggers(&conn)?;
         migrate_secret_hint(&conn)?;
+        migrate_pins_and_tags(&conn)?;
         Ok(Self {
             conn,
             db_path: db_path.to_path_buf(),
@@ -230,38 +246,287 @@ impl Store {
         limit: usize,
         range: Option<(i64, i64)>,
     ) -> Result<Vec<SearchHit>, StoreError> {
+        self.search_keyword_scoped(query, limit, range, &BrowseFilter::default())
+    }
+
+    pub fn search_keyword_scoped(
+        &self,
+        query: &str,
+        limit: usize,
+        range: Option<(i64, i64)>,
+        filter: &BrowseFilter,
+    ) -> Result<Vec<SearchHit>, StoreError> {
         let limit = limit.max(1) as i64;
         let (start, end) = match range {
-            Some((s, e)) => (Some(s), Some(e)),
-            None => (None, None),
+            Some((s, e)) => (opt_i64(Some(s)), opt_i64(Some(e))),
+            None => (Value::Null, Value::Null),
         };
-        let overlap = "(?2 IS NULL OR (c.first_seen_at <= ?3 AND c.last_seen_at >= ?2))";
+        let overlap = "(? IS NULL OR (c.first_seen_at <= ? AND c.last_seen_at >= ?))";
+        let extra = browse_clause(filter);
+        let cols = HIT_COLS;
         if let Some(match_query) = fts_or_query(query) {
             let sql = format!(
-                "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, ''),
-                        c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, '')
+                "SELECT {cols}
                  FROM clips_fts
                  JOIN clips c ON c.id = clips_fts.rowid
-                 WHERE clips_fts MATCH ?1 AND {overlap}
-                 ORDER BY bm25(clips_fts) ASC, c.last_seen_at DESC
-                 LIMIT ?4"
+                 WHERE clips_fts MATCH ? AND {overlap}{extra}
+                 ORDER BY bm25(clips_fts, 1.0, 3.0) ASC, c.last_seen_at DESC
+                 LIMIT ?"
             );
+            let mut binds = vec![Value::Text(match_query), start.clone(), end, start];
+            push_tag_binds(&mut binds, filter);
+            binds.push(Value::Integer(limit));
             let mut stmt = self.conn.prepare(&sql)?;
-            return map_hits(stmt.query_map(params![match_query, start, end, limit], hit_from_row)?);
+            return map_hits(stmt.query_map(params_from_iter(binds), hit_from_row)?);
         }
-        if range.is_some() {
+        let scoped = range.is_some() || filter.pinned_only || !filter.tags.is_empty();
+        if scoped {
             let sql = format!(
-                "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, ''),
-                        c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, '')
+                "SELECT {cols}
                  FROM clips c
-                 WHERE {overlap}
+                 WHERE {overlap}{extra}
                  ORDER BY c.last_seen_at DESC
-                 LIMIT ?4"
+                 LIMIT ?"
             );
+            let mut binds = vec![start.clone(), end, start];
+            push_tag_binds(&mut binds, filter);
+            binds.push(Value::Integer(limit));
             let mut stmt = self.conn.prepare(&sql)?;
-            return map_hits(stmt.query_map(params!["", start, end, limit], hit_from_row)?);
+            return map_hits(stmt.query_map(params_from_iter(binds), hit_from_row)?);
         }
         Ok(Vec::new())
+    }
+
+    pub fn list_recent(
+        &self,
+        offset: i64,
+        limit: i64,
+        filter: &BrowseFilter,
+    ) -> Result<Vec<SearchHit>, StoreError> {
+        let extra = browse_clause(filter);
+        let sql = format!(
+            "SELECT {HIT_COLS}
+             FROM clips c
+             WHERE 1=1{extra}
+             ORDER BY c.last_seen_at DESC
+             LIMIT ? OFFSET ?"
+        );
+        let mut binds = Vec::new();
+        push_tag_binds(&mut binds, filter);
+        binds.push(Value::Integer(limit.max(1)));
+        binds.push(Value::Integer(offset.max(0)));
+        let mut stmt = self.conn.prepare(&sql)?;
+        map_hits(stmt.query_map(params_from_iter(binds), hit_from_row)?)
+    }
+
+    pub fn list_tags(&self) -> Result<Vec<TagCount>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT t.name, COUNT(ct.clip_id) AS n
+             FROM tags t
+             JOIN clip_tags ct ON ct.tag_id = t.id
+             GROUP BY t.id, t.name
+             ORDER BY n DESC, t.name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(TagCount {
+                name: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn pin_clip(&self, id: i64, now_ms: i64) -> Result<(), StoreError> {
+        self.require_clip(id)?;
+        self.conn.execute(
+            "UPDATE clips SET pinned_at = ?1,
+                 expires_at = CASE WHEN is_secret = 1 THEN NULL ELSE expires_at END
+             WHERE id = ?2",
+            params![now_ms, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn unpin_clip(
+        &self,
+        id: i64,
+        now_ms: i64,
+        secret_ttl_hours: u32,
+    ) -> Result<(), StoreError> {
+        self.require_clip(id)?;
+        let expires = secret_expiry(now_ms, secret_ttl_hours);
+        self.conn.execute(
+            "UPDATE clips SET pinned_at = NULL,
+                 expires_at = CASE WHEN is_secret = 1 THEN ?1 ELSE expires_at END
+             WHERE id = ?2",
+            params![expires, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn tag_clip(&self, id: i64, raw: &str) -> Result<Vec<String>, StoreError> {
+        self.require_clip(id)?;
+        let Some(name) = normalize_tag(raw) else {
+            return Err(StoreError::InvalidTag);
+        };
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM clip_tags WHERE clip_id = ?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        let already: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM clip_tags ct JOIN tags t ON t.id = ct.tag_id
+             WHERE ct.clip_id = ?1 AND t.name = ?2 COLLATE NOCASE",
+            params![id, name],
+            |row| row.get(0),
+        )?;
+        if already == 0 && n >= MAX_TAGS_PER_CLIP as i64 {
+            return Err(StoreError::TooManyTags);
+        }
+        self.conn.execute(
+            "INSERT INTO tags(name) VALUES (?1) ON CONFLICT(name) DO NOTHING",
+            [&name],
+        )?;
+        let tag_id: i64 = self.conn.query_row(
+            "SELECT id FROM tags WHERE name = ?1 COLLATE NOCASE",
+            [&name],
+            |row| row.get(0),
+        )?;
+        self.conn.execute(
+            "INSERT OR IGNORE INTO clip_tags(clip_id, tag_id) VALUES (?1, ?2)",
+            params![id, tag_id],
+        )?;
+        self.sync_tags_text(id)?;
+        self.delete_embedding(id)?;
+        self.clip_tags(id)
+    }
+
+    pub fn untag_clip(&self, id: i64, raw: &str) -> Result<Vec<String>, StoreError> {
+        self.require_clip(id)?;
+        let Some(name) = normalize_tag(raw) else {
+            return Err(StoreError::InvalidTag);
+        };
+        self.conn.execute(
+            "DELETE FROM clip_tags WHERE clip_id = ?1 AND tag_id IN (
+                SELECT id FROM tags WHERE name = ?2 COLLATE NOCASE
+             )",
+            params![id, name],
+        )?;
+        self.conn.execute(
+            "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM clip_tags)",
+            [],
+        )?;
+        self.sync_tags_text(id)?;
+        self.delete_embedding(id)?;
+        self.clip_tags(id)
+    }
+
+    pub fn clip_tags(&self, id: i64) -> Result<Vec<String>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT t.name FROM clip_tags ct JOIN tags t ON t.id = ct.tag_id
+             WHERE ct.clip_id = ?1 ORDER BY t.name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([id], |row| row.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn mark_secret(&self, id: i64, now_ms: i64, secret_ttl_hours: u32) -> Result<(), StoreError> {
+        let row: Option<(Option<String>, i64, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT content, is_secret, COALESCE(source_exe, ''), COALESCE(window_title, '')
+                 FROM clips WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        let Some((content, is_secret, exe, title)) = row else {
+            return Err(StoreError::NotFound(id));
+        };
+        if is_secret == 1 {
+            return Err(StoreError::AlreadySecret(id));
+        }
+        let content = content.ok_or(StoreError::NotFound(id))?;
+        let (kind, matched) = if let Some((kind, start, end)) = detect_span(&content) {
+            let matched = if end <= content.len() && start < end {
+                content[start..end].to_string()
+            } else {
+                content.clone()
+            };
+            (kind, matched)
+        } else {
+            (crate::secrets::SecretKind::HighEntropy, content.clone())
+        };
+        self.convert_plain_to_secret(
+            id,
+            &content,
+            &matched,
+            &exe,
+            &title,
+            now_ms,
+            secret_ttl_hours,
+            kind,
+        )?;
+        self.rebuild_fts()?;
+        self.checkpoint()?;
+        self.vacuum()?;
+        self.checkpoint()?;
+        Ok(())
+    }
+
+    pub fn delete_clip(&self, id: i64) -> Result<(), StoreError> {
+        let n = self.conn.execute("DELETE FROM clips WHERE id = ?1", [id])?;
+        if n == 0 {
+            return Err(StoreError::NotFound(id));
+        }
+        self.conn.execute(
+            "DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM clip_tags)",
+            [],
+        )?;
+        self.rebuild_fts()?;
+        self.checkpoint()?;
+        self.vacuum()?;
+        self.checkpoint()?;
+        Ok(())
+    }
+
+    fn require_clip(&self, id: i64) -> Result<(), StoreError> {
+        let n: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM clips WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+        if n == 0 {
+            Err(StoreError::NotFound(id))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn sync_tags_text(&self, id: i64) -> Result<(), StoreError> {
+        let text: String = self.conn.query_row(
+            "SELECT IFNULL((
+                SELECT group_concat(name, ' ') FROM (
+                    SELECT t.name AS name FROM clip_tags ct
+                    JOIN tags t ON t.id = ct.tag_id
+                    WHERE ct.clip_id = ?1
+                    ORDER BY t.name COLLATE NOCASE
+                )
+            ), '')",
+            [id],
+            |row| row.get(0),
+        )?;
+        self.conn
+            .execute("UPDATE clips SET tags_text = ?1 WHERE id = ?2", params![text, id])?;
+        Ok(())
     }
 
     pub fn clip_content(&self, id: i64) -> Result<String, StoreError> {
@@ -305,7 +570,8 @@ impl Store {
     pub fn clip_search_text(&self, id: i64) -> Result<String, StoreError> {
         self.conn
             .query_row(
-                "SELECT search_text FROM clips WHERE id = ?1",
+                "SELECT TRIM(search_text || CASE WHEN tags_text = '' THEN '' ELSE ' ' || tags_text END)
+                 FROM clips WHERE id = ?1",
                 [id],
                 |row| row.get(0),
             )
@@ -326,7 +592,7 @@ impl Store {
 
     pub fn clips_missing_embeddings(&self) -> Result<Vec<(i64, String)>, StoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.search_text
+            "SELECT c.id, TRIM(c.search_text || CASE WHEN c.tags_text = '' THEN '' ELSE ' ' || c.tags_text END)
              FROM clips c
              LEFT JOIN clip_embeddings e ON e.clip_id = c.id
              WHERE e.clip_id IS NULL
@@ -364,18 +630,31 @@ impl Store {
         &self,
         range: Option<(i64, i64)>,
     ) -> Result<Vec<StoredEmbedding>, StoreError> {
-        let sql = "SELECT e.clip_id, c.last_seen_at, COALESCE(c.source_exe, ''),
-                          COALESCE(c.content, ''), e.model, e.embedding,
-                          c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, '')
-                   FROM clip_embeddings e
-                   JOIN clips c ON c.id = e.clip_id
-                   WHERE (?1 IS NULL OR (c.first_seen_at <= ?2 AND c.last_seen_at >= ?1))";
+        self.list_embeddings_scoped(range, &BrowseFilter::default())
+    }
+
+    pub fn list_embeddings_scoped(
+        &self,
+        range: Option<(i64, i64)>,
+        filter: &BrowseFilter,
+    ) -> Result<Vec<StoredEmbedding>, StoreError> {
+        let extra = browse_clause(filter);
+        let sql = format!(
+            "SELECT e.clip_id, c.last_seen_at, COALESCE(c.source_exe, ''),
+                    COALESCE(c.content, ''), e.model, e.embedding,
+                    c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, '')
+             FROM clip_embeddings e
+             JOIN clips c ON c.id = e.clip_id
+             WHERE (? IS NULL OR (c.first_seen_at <= ? AND c.last_seen_at >= ?)){extra}"
+        );
         let (start, end) = match range {
-            Some((s, e)) => (Some(s), Some(e)),
-            None => (None, None),
+            Some((s, e)) => (opt_i64(Some(s)), opt_i64(Some(e))),
+            None => (Value::Null, Value::Null),
         };
-        let mut stmt = self.conn.prepare(sql)?;
-        let rows = stmt.query_map(params![start, end], |row| {
+        let mut binds = vec![start.clone(), end, start];
+        push_tag_binds(&mut binds, filter);
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(binds), |row| {
             let blob: Vec<u8> = row.get(5)?;
             let content: String = row.get(3)?;
             let is_secret: i64 = row.get(6)?;
@@ -403,6 +682,16 @@ impl Store {
         limit: usize,
         range: Option<(i64, i64)>,
     ) -> Result<Vec<SearchHit>, StoreError> {
+        self.search_vector_scoped(vector, limit, range, &BrowseFilter::default())
+    }
+
+    pub fn search_vector_scoped(
+        &self,
+        vector: &[f32],
+        limit: usize,
+        range: Option<(i64, i64)>,
+        filter: &BrowseFilter,
+    ) -> Result<Vec<SearchHit>, StoreError> {
         if vector.len() != EMBED_DIMS {
             return Err(StoreError::Embedding(format!(
                 "query embedding len {} != {EMBED_DIMS}",
@@ -412,22 +701,36 @@ impl Store {
         let query = l2_normalize(vector).ok_or_else(|| {
             StoreError::Embedding("cannot L2-normalize a zero query vector".into())
         })?;
-        let rows = self.list_embeddings(range)?;
+        let rows = self.list_embeddings_scoped(range, filter)?;
         let scored: Vec<(f32, &StoredEmbedding)> = rows
             .iter()
             .filter(|row| row.embedding.len() == EMBED_DIMS)
             .map(|row| (dot(&query, &row.embedding), row))
             .collect();
         let ranked = rank_by_score(scored, limit);
-        Ok(ranked
-            .into_iter()
-            .map(|row| SearchHit {
+        let mut hits = Vec::new();
+        for row in ranked {
+            let (tags, pinned) = self.hit_meta(row.clip_id)?;
+            hits.push(SearchHit {
                 id: row.clip_id,
                 last_seen_at: row.last_seen_at,
                 source_exe: row.source_exe.clone(),
                 preview: row.preview.clone(),
-            })
-            .collect())
+                tags,
+                pinned,
+            });
+        }
+        Ok(hits)
+    }
+
+    fn hit_meta(&self, id: i64) -> Result<(String, bool), StoreError> {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(tags_text, ''), pinned_at IS NOT NULL FROM clips WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? == 1)),
+            )
+            .map_err(|_| StoreError::NotFound(id))
     }
 
     pub fn delete_embedding(&self, id: i64) -> Result<(), StoreError> {
@@ -446,15 +749,18 @@ impl Store {
         let retention_ms = i64::from(retention_days) * 86_400_000;
         let cutoff = now_ms.saturating_sub(retention_ms);
         let expired = if secret_ttl_hours == 0 {
-            self.conn.execute("DELETE FROM clips WHERE is_secret = 1", [])?
+            self.conn.execute(
+                "DELETE FROM clips WHERE is_secret = 1 AND pinned_at IS NULL",
+                [],
+            )?
         } else {
             self.conn.execute(
-                "DELETE FROM clips WHERE expires_at IS NOT NULL AND expires_at < ?1",
+                "DELETE FROM clips WHERE expires_at IS NOT NULL AND expires_at < ?1 AND pinned_at IS NULL",
                 [now_ms],
             )?
         };
         let old = self.conn.execute(
-            "DELETE FROM clips WHERE is_secret = 0 AND last_seen_at < ?1",
+            "DELETE FROM clips WHERE is_secret = 0 AND pinned_at IS NULL AND last_seen_at < ?1",
             [cutoff],
         )?;
         let deleted = expired as u64 + old as u64;
@@ -564,7 +870,16 @@ impl Store {
         let enc = dpapi_protect(content.as_bytes()).map_err(|e| StoreError::Dpapi(e.to_string()))?;
         let search_text = secret_search_text(kind, exe, title);
         let hint = secret_hint(matched);
-        let expires_at = secret_expiry(now_ms, secret_ttl_hours);
+        let pinned: i64 = self.conn.query_row(
+            "SELECT CASE WHEN pinned_at IS NOT NULL THEN 1 ELSE 0 END FROM clips WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        let expires_at = if pinned == 1 {
+            None
+        } else {
+            Some(secret_expiry(now_ms, secret_ttl_hours))
+        };
         self.conn.execute(
             "UPDATE clips SET is_secret = 1, kind = ?1, content = NULL, content_enc = ?2,
              search_text = ?3, expires_at = ?4, secret_hint = ?5 WHERE id = ?6",
@@ -582,16 +897,24 @@ pub struct RescanReport {
     pub reembed: Vec<(i64, String)>,
 }
 
+const HIT_COLS: &str = "c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, ''),
+                        c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, ''),
+                        COALESCE(c.tags_text, ''), CASE WHEN c.pinned_at IS NOT NULL THEN 1 ELSE 0 END";
+
 fn hit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SearchHit> {
     let content: String = row.get(3)?;
     let is_secret: i64 = row.get(4)?;
     let kind: String = row.get(5)?;
     let hint: String = row.get(6)?;
+    let tags: String = row.get(7)?;
+    let pinned: i64 = row.get(8)?;
     Ok(SearchHit {
         id: row.get(0)?,
         last_seen_at: row.get(1)?,
         source_exe: row.get(2)?,
         preview: hit_preview(is_secret, &kind, &hint, &content),
+        tags,
+        pinned: pinned == 1,
     })
 }
 
@@ -613,21 +936,115 @@ fn secret_expiry(now_ms: i64, secret_ttl_hours: u32) -> i64 {
     }
 }
 
-fn ensure_fts_triggers(conn: &Connection) -> Result<(), StoreError> {
+fn opt_i64(v: Option<i64>) -> Value {
+    match v {
+        Some(n) => Value::Integer(n),
+        None => Value::Null,
+    }
+}
+
+fn browse_clause(filter: &BrowseFilter) -> String {
+    let mut extra = String::new();
+    if filter.pinned_only {
+        extra.push_str(" AND c.pinned_at IS NOT NULL");
+    }
+    for _ in &filter.tags {
+        extra.push_str(
+            " AND EXISTS (SELECT 1 FROM clip_tags ct JOIN tags t ON t.id = ct.tag_id \
+             WHERE ct.clip_id = c.id AND t.name LIKE '%' || ? || '%' COLLATE NOCASE)",
+        );
+    }
+    extra
+}
+
+fn push_tag_binds(binds: &mut Vec<Value>, filter: &BrowseFilter) {
+    for tag in &filter.tags {
+        binds.push(Value::Text(tag.clone()));
+    }
+}
+
+fn migrate_pins_and_tags(conn: &Connection) -> Result<(), StoreError> {
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version < 2 {
+        let mut stmt = conn.prepare("PRAGMA table_info(clips)")?;
+        let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        let mut has_pinned = false;
+        let mut has_tags_text = false;
+        for name in names {
+            let name = name?;
+            if name == "pinned_at" {
+                has_pinned = true;
+            }
+            if name == "tags_text" {
+                has_tags_text = true;
+            }
+        }
+        drop(stmt);
+        if !has_pinned {
+            conn.execute("ALTER TABLE clips ADD COLUMN pinned_at INTEGER", [])?;
+        }
+        if !has_tags_text {
+            conn.execute(
+                "ALTER TABLE clips ADD COLUMN tags_text TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+        }
+        conn.execute_batch(
+            r#"
+CREATE TABLE IF NOT EXISTS tags (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE
+);
+CREATE TABLE IF NOT EXISTS clip_tags (
+  clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+  tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (clip_id, tag_id)
+);
+"#,
+        )?;
+        rebuild_fts_v2(conn)?;
+        conn.pragma_update(None, "user_version", 2)?;
+    } else {
+        ensure_fts_triggers_v2(conn)?;
+    }
+    Ok(())
+}
+
+fn rebuild_fts_v2(conn: &Connection) -> Result<(), StoreError> {
+    conn.execute_batch(
+        r#"
+DROP TRIGGER IF EXISTS clips_ai;
+DROP TRIGGER IF EXISTS clips_ad;
+DROP TRIGGER IF EXISTS clips_au;
+DROP TABLE IF EXISTS clips_fts;
+CREATE VIRTUAL TABLE clips_fts USING fts5(
+  search_text, tags_text, content='clips', content_rowid='id', tokenize='porter unicode61'
+);
+"#,
+    )?;
+    ensure_fts_triggers_v2(conn)?;
+    conn.execute("INSERT INTO clips_fts(clips_fts) VALUES('rebuild')", [])?;
+    Ok(())
+}
+
+fn ensure_fts_triggers_v2(conn: &Connection) -> Result<(), StoreError> {
     conn.execute_batch(
         r#"
 DROP TRIGGER IF EXISTS clips_ai;
 DROP TRIGGER IF EXISTS clips_ad;
 DROP TRIGGER IF EXISTS clips_au;
 CREATE TRIGGER clips_ai AFTER INSERT ON clips BEGIN
-  INSERT INTO clips_fts(rowid, search_text) VALUES (new.id, new.search_text);
+  INSERT INTO clips_fts(rowid, search_text, tags_text) VALUES (new.id, new.search_text, new.tags_text);
 END;
 CREATE TRIGGER clips_ad AFTER DELETE ON clips BEGIN
-  INSERT INTO clips_fts(clips_fts, rowid, search_text) VALUES('delete', old.id, old.search_text);
+  INSERT INTO clips_fts(clips_fts, rowid, search_text, tags_text)
+    VALUES('delete', old.id, old.search_text, old.tags_text);
 END;
 CREATE TRIGGER clips_au AFTER UPDATE ON clips BEGIN
-  INSERT INTO clips_fts(clips_fts, rowid, search_text) VALUES('delete', old.id, old.search_text);
-  INSERT INTO clips_fts(rowid, search_text) VALUES (new.id, new.search_text);
+  INSERT INTO clips_fts(clips_fts, rowid, search_text, tags_text)
+    VALUES('delete', old.id, old.search_text, old.tags_text);
+  INSERT INTO clips_fts(rowid, search_text, tags_text)
+    VALUES (new.id, new.search_text, new.tags_text);
 END;
 "#,
     )?;
@@ -1044,6 +1461,130 @@ mod tests {
         let n = store.purge(3_000, 90, 0).unwrap();
         assert!(n >= 1);
         store.scrub().unwrap();
+        assert_key_absent_on_disk(&store, key);
+        drop(store);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrates_v1_schema_and_keeps_rows() {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("cliptrace-m8a-{n}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cliptrace.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            r#"
+CREATE TABLE clips (
+  id INTEGER PRIMARY KEY,
+  hash TEXT NOT NULL UNIQUE,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  copy_count INTEGER NOT NULL DEFAULT 1,
+  kind TEXT NOT NULL,
+  is_secret INTEGER NOT NULL DEFAULT 0,
+  content TEXT,
+  content_enc BLOB,
+  search_text TEXT NOT NULL,
+  source_exe TEXT,
+  window_title TEXT,
+  expires_at INTEGER,
+  secret_hint TEXT
+);
+CREATE VIRTUAL TABLE clips_fts USING fts5(
+  search_text, content='clips', content_rowid='id', tokenize='porter unicode61'
+);
+INSERT INTO clips (hash, first_seen_at, last_seen_at, copy_count, kind, is_secret, content, search_text, source_exe, window_title)
+VALUES ('abc', 1, 1, 1, 'other', 0, 'hello sample', 'hello sample', 'notepad.exe', 't');
+"#,
+        )
+        .unwrap();
+        drop(conn);
+        let store = Store::open(&path).unwrap();
+        let version: i64 = store
+            .conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        let (content, tags, pinned): (String, String, Option<i64>) = store
+            .conn
+            .query_row(
+                "SELECT content, tags_text, pinned_at FROM clips WHERE hash = 'abc'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(content, "hello sample");
+        assert_eq!(tags, "");
+        assert!(pinned.is_none());
+        let sql: String = store
+            .conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'clips_fts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(sql.contains("tags_text"));
+        drop(store);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn purge_skips_pinned_clips() {
+        let (dir, store) = temp_db();
+        let keep = store.upsert_clip(&clip("keep pinned prose"), 1_000, 24).unwrap();
+        let gone = store.upsert_clip(&clip("drop old prose here"), 1_000, 24).unwrap();
+        let UpsertOutcome::Inserted { id: kid } = keep else { panic!("keep") };
+        let UpsertOutcome::Inserted { id: gid } = gone else { panic!("gone") };
+        store.pin_clip(kid, 1_000).unwrap();
+        let n = store.purge(10_000, 0, 24).unwrap();
+        assert!(n >= 1);
+        let left: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM clips WHERE id = ?1", [kid], |row| row.get(0))
+            .unwrap();
+        let dropped: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM clips WHERE id = ?1", [gid], |row| row.get(0))
+            .unwrap();
+        assert_eq!(left, 1);
+        assert_eq!(dropped, 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fts_finds_clip_by_tag_only() {
+        let (dir, store) = temp_db();
+        let ins = store.upsert_clip(&clip("hello world uniquebody"), 1_000, 24).unwrap();
+        let UpsertOutcome::Inserted { id } = ins else { panic!("ins") };
+        store.tag_clip(id, "RBC app").unwrap();
+        let hits = store.search_keyword("rbc", 5, None).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, id);
+        let none = store.search_keyword("hunter2", 5, None).unwrap();
+        assert!(none.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mark_secret_and_delete_wipe_plaintext_bytes() {
+        let (dir, store) = temp_db();
+        let key = "hunter2";
+        let ins = store.upsert_clip(&clip(key), 1_000, 24).unwrap();
+        let UpsertOutcome::Inserted { id } = ins else { panic!("ins") };
+        store.tag_clip(id, "RBC app").unwrap();
+        store.mark_secret(id, 2_000, 24).unwrap();
+        let preview = store.display_preview(id).unwrap();
+        assert!(!preview.contains(key));
+        assert!(store.search_keyword(key, 5, None).unwrap().is_empty());
+        let tagged = store.search_keyword("rbc", 5, None).unwrap();
+        assert_eq!(tagged[0].id, id);
+        assert_eq!(store.clip_content(id).unwrap(), key);
+        store.delete_clip(id).unwrap();
         assert_key_absent_on_disk(&store, key);
         drop(store);
         let _ = std::fs::remove_dir_all(&dir);

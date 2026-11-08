@@ -78,7 +78,7 @@ CREATE TABLE clips (
   expires_at    INTEGER                   -- unix ms; set for secrets (TTL)
 );
 CREATE VIRTUAL TABLE clips_fts USING fts5(
-  search_text, content='clips', content_rowid='id', tokenize='porter unicode61'
+  search_text, tags_text, content='clips', content_rowid='id', tokenize='porter unicode61'
 );
 CREATE TABLE clip_embeddings (
   clip_id INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
@@ -89,7 +89,17 @@ CREATE TABLE clip_embeddings (
 - Dedupe: on hash match, bump `last_seen_at` and `copy_count`; do not insert a new row.
 - `search_text` for normal clips = content (truncated to ~2k chars for embedding).
 - `search_text` for secrets = context only, e.g. `stripe api key copied from chrome.exe, "Stripe Dashboard - API keys"`. The raw key never enters FTS or the vector index.
-- Purge job: delete rows where `expires_at < now` (default secret TTL 24h).
+- `pinned_at INTEGER NULL`, `tags_text TEXT NOT NULL DEFAULT ''`.
+- `tags(id, name UNIQUE COLLATE NOCASE)` and `clip_tags(clip_id, tag_id)` composite PK, both FKs `ON DELETE CASCADE`.
+- Schema migrations use `PRAGMA user_version` (current: 2).
+- Keyword rank: `bm25(clips_fts, 1.0, 3.0)` (search_text, tags_text).
+- Purge never deletes pinned clips. Pinning a secret clears `expires_at`; unpin restores TTL.
+- Tags: trim, collapse whitespace, max 32 chars, max 10 per clip, case-insensitive. `tags_text` stays in sync; FTS + embedding re-queue use search_text plus tags (secrets: context plus tags, never content).
+- `mark-secret <id>` converts plaintext in place (DPAPI, content NULL, one-way) with secure-delete/checkpoint.
+- `delete <id>` removes clip, FTS, embedding, tag links, then checkpoint/VACUUM.
+- `list_recent(offset, limit, filter)` by `last_seen_at DESC`; filter all / pinned / tag. Secrets masked.
+- Search optional pinned/tag scope; `#tag` tokens stripped from query text then applied as filters.
+- Purge job: delete unpinned rows where `expires_at < now` (default secret TTL 24h).
 
 ### embed (M4)
 - `fastembed` full `BGESmallENV15` (`bge-small-en-v1.5`), 384 dims, ONNX intra-op threads = 2.
@@ -156,6 +166,7 @@ Work one milestone at a time. Commit after each one passes.
 | M5 | Hybrid + time | `cliptrace search "stripe key from tuesday"` returns the right clip in the top 5 |
 | M6 | Secrets | Fake `sk_live_...` copy is stored encrypted, not findable by its characters, findable by "stripe key", purged after TTL |
 | M7 | Popup UI | Ctrl+Alt+V (configurable `hotkey`) opens a search box, Enter copies the result back and closes |
+| M8a | Pins/tags/delete data | pin survives purge; tag FTS + `#tag`; mark-secret/delete wipe plaintext from `.db`/`-wal`; CLI list/tags; no UI yet |
 
 M1-M5 are the core product. If time runs short, cut from the bottom.
 
