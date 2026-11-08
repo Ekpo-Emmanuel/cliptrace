@@ -366,6 +366,11 @@ impl Store {
         Ok(cards)
     }
 
+    pub fn clip_count(&self) -> Result<i64, StoreError> {
+        let n = self.conn.query_row("SELECT COUNT(*) FROM clips", [], |row| row.get(0))?;
+        Ok(n)
+    }
+
     pub fn pinned_count(&self) -> Result<i64, StoreError> {
         let n = self.conn.query_row(
             "SELECT COUNT(*) FROM clips WHERE pinned_at IS NOT NULL",

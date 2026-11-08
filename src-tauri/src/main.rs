@@ -34,6 +34,7 @@ static SINGLETON: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsiz
 struct BrowsePayload {
     cards: Vec<ClipCard>,
     pinned: i64,
+    total: i64,
     note: Option<String>,
     paused: bool,
 }
@@ -367,6 +368,7 @@ fn browse_clips(
     let store = Store::open(&paths.db_path).map_err(|e| e.to_string())?;
     let filter = scope_for(&tab, &tag);
     let pinned = store.pinned_count().map_err(|e| e.to_string())?;
+    let total = store.clip_count().map_err(|e| e.to_string())?;
     let paused = state.paused.load(Ordering::SeqCst);
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -381,6 +383,7 @@ fn browse_clips(
         return Ok(BrowsePayload {
             cards,
             pinned,
+            total,
             note: None,
             paused,
         });
@@ -429,6 +432,7 @@ fn browse_clips(
     Ok(BrowsePayload {
         cards,
         pinned,
+        total,
         note,
         paused,
     })

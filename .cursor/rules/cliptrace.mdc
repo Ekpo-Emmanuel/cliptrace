@@ -32,3 +32,8 @@ Read SPEC.md before doing anything. It is the source of truth for architecture, 
 - Data paths come from `%LOCALAPPDATA%\Cliptrace\`, overridable with `CLIPTRACE_DATA_DIR`.
 - If something fails twice in a row (build error, DLL load, sqlite-vec loading), stop and explain the root cause instead of trying a third variation.
 - If a dependency blocks progress for a long time (`ort`/ONNX, `sqlite-vec`), stop and tell me so we can decide whether to switch approaches.
+
+## UI design
+- `design/stitch/DESIGN.md` is the source of truth for visual design (colors, type, spacing, radii, components). Read it before any UI change. Screenshots in `design/stitch/` are the visual check.
+- Don't invent styles that aren't in DESIGN.md. If something is missing, extend it in the same spirit and tell me.
+- Where DESIGN.md conflicts with SPEC.md or the privacy rules (no network requests, no raw secrets rendered, fixed 760x560 popup), SPEC.md and the privacy rules win. Tell me about the conflict.

@@ -1,4 +1,10 @@
-import type { BrowseArgs, BrowsePayload, ClipCard, CliptraceApi, TagCount } from "./api";
+import type {
+  BrowseArgs,
+  BrowsePayload,
+  ClipCard,
+  CliptraceApi,
+  TagCount,
+} from "./api";
 
 export type MockState =
   | "empty"
@@ -6,19 +12,96 @@ export type MockState =
   | "paused"
   | "keyword-only"
   | "dark"
-  | "light";
+  | "light"
+  | "nopins";
 
-function nowMinus(ms: number): number {
+const TAGS = [
+  "RBC app",
+  "work",
+  "wifi",
+  "dev",
+  "billing",
+  "home",
+  "meeting",
+  "hr",
+];
+
+function ago(ms: number): number {
   return Date.now() - ms;
 }
 
+function seedCard(id: number): ClipCard {
+  const hour = 3_600_000;
+  const day = 86_400_000;
+  const slot = id - 200;
+  const kinds: ClipCard["kind"][] = [
+    "text",
+    "link",
+    "code",
+    "text",
+    "link",
+    "code",
+    "text",
+  ];
+  const kind = kinds[slot % kinds.length];
+  const apps = [
+    ["msedge.exe", "Inbox — Outlook"],
+    ["Code.exe", "cliptrace / store.rs"],
+    ["chrome.exe", "GitHub"],
+    ["Slack.exe", "eng-help"],
+    ["WindowsTerminal.exe", "pwsh"],
+    ["notepad.exe", "scratch"],
+    ["EXCEL.EXE", "Q3 forecast"],
+    ["Figma.exe", "Popup — Frame 12"],
+  ] as const;
+  const [exe, title] = apps[slot % apps.length];
+  const pinned = slot % 17 === 0;
+  const tag = slot % 9 === 0 ? [TAGS[slot % TAGS.length]] : [];
+  const bodies: Record<string, string> = {
+    text: [
+      "Parking is behind the brick building. Gate code is on the fridge note.",
+      "Follow up with Maya after the 2pm standup about the invoice.",
+      "Kids pickup is 3:40 at the side door, not the main lot.",
+      "The printer on 4 is jam-prone. Use the one by finance.",
+      "Ship date slipped to Thursday. Tell the client before noon.",
+    ][slot % 5],
+    link: [
+      "https://github.com/jtabo/cliptrace/pull/18",
+      "https://linear.app/cliptrace/issue/CLP-42",
+      "https://docs.google.com/spreadsheets/d/mock-budget",
+      "https://stackoverflow.com/questions/7281/rust-fts5",
+      "https://learn.microsoft.com/windows/win32/dataxchg/clipboard",
+    ][slot % 5],
+    code: [
+      "const hits = await api.browseClips({ query, tab, tag, offset: 0 });",
+      "UPDATE clips SET pinned_at = ?1 WHERE id = ?2;",
+      "Get-Process cliptrace-app | Select-Object Id, WorkingSet64",
+      "fn relTime(ms: i64, now: i64) -> String { /* injected now */ }",
+      'rg --hidden -n "hunter2" cliptrace.db',
+    ][slot % 5],
+  };
+  const body = bodies[kind] ?? bodies.text;
+  return {
+    id,
+    last_seen_at: ago((slot % 40) * hour + Math.floor(slot / 12) * day),
+    source_exe: exe,
+    window_title: title,
+    preview: body.split("\n")[0].slice(0, 80),
+    body,
+    kind,
+    tags: tag,
+    pinned,
+    copy_count: 1 + (slot % 6),
+  };
+}
+
 function sampleCards(): ClipCard[] {
-  return [
+  const featured: ClipCard[] = [
     {
       id: 101,
-      last_seen_at: nowMinus(2 * 60_000),
+      last_seen_at: ago(2 * 60_000),
       source_exe: "msedge.exe",
-      window_title: "Quo — business phone",
+      window_title: "Quo — pricing",
       preview: "https://www.quo.com/pricing",
       body: "https://www.quo.com/pricing",
       kind: "link",
@@ -28,43 +111,43 @@ function sampleCards(): ClipCard[] {
     },
     {
       id: 102,
-      last_seen_at: nowMinus(15 * 60_000),
+      last_seen_at: ago(15 * 60_000),
       source_exe: "Code.exe",
       window_title: "store.rs",
       preview: "pub fn list_recent(offset, limit, filter)",
       body: "pub fn list_recent(\n    offset: i64,\n    limit: i64,\n    filter: &BrowseFilter,\n) -> Result<Vec<SearchHit>, StoreError> {",
       kind: "code",
-      tags: [],
+      tags: ["dev"],
       pinned: false,
       copy_count: 1,
     },
     {
       id: 103,
-      last_seen_at: nowMinus(40 * 60_000),
+      last_seen_at: ago(40 * 60_000),
       source_exe: "notepad.exe",
       window_title: "notes",
       preview: "Wifi is on the fridge. Ask Maya if the code changed.",
       body: "Wifi is on the fridge. Ask Maya if the code changed.",
       kind: "text",
-      tags: [],
+      tags: ["wifi", "home"],
       pinned: false,
       copy_count: 1,
     },
     {
       id: 104,
-      last_seen_at: nowMinus(3 * 60 * 60_000),
+      last_seen_at: ago(3 * 3_600_000),
       source_exe: "chrome.exe",
       window_title: "Payroll",
       preview: "office-vpn.internal.example",
       body: "office-vpn.internal.example",
       kind: "text",
-      tags: [],
+      tags: ["work"],
       pinned: true,
       copy_count: 8,
     },
     {
       id: 105,
-      last_seen_at: nowMinus(26 * 60 * 60_000),
+      last_seen_at: ago(26 * 3_600_000),
       source_exe: "chrome.exe",
       window_title: "RBC Online",
       preview: "client id 448219",
@@ -76,7 +159,7 @@ function sampleCards(): ClipCard[] {
     },
     {
       id: 106,
-      last_seen_at: nowMinus(5 * 60_000),
+      last_seen_at: ago(5 * 60_000),
       source_exe: "chrome.exe",
       window_title: "Stripe Dashboard - API keys",
       preview: "[stripe key sk_t…]",
@@ -86,47 +169,85 @@ function sampleCards(): ClipCard[] {
       pinned: false,
       copy_count: 1,
     },
+    {
+      id: 107,
+      last_seen_at: ago(8 * 60_000),
+      source_exe: "Slack.exe",
+      window_title: "eng-help",
+      preview: "Standup moved to 10:15. Bring the cliptrace demo build.",
+      body: "Standup moved to 10:15. Bring the cliptrace demo build.",
+      kind: "text",
+      tags: ["meeting"],
+      pinned: false,
+      copy_count: 1,
+    },
+    {
+      id: 108,
+      last_seen_at: ago(22 * 60_000),
+      source_exe: "chrome.exe",
+      window_title: "Linear — CLP-88",
+      preview: "https://linear.app/cliptrace/issue/CLP-88",
+      body: "https://linear.app/cliptrace/issue/CLP-88",
+      kind: "link",
+      tags: ["dev"],
+      pinned: false,
+      copy_count: 2,
+    },
+    {
+      id: 109,
+      last_seen_at: ago(51 * 60_000),
+      source_exe: "WindowsTerminal.exe",
+      window_title: "pwsh",
+      preview: "cargo tauri dev --config src-tauri/tauri.conf.json",
+      body: "cargo tauri dev --config src-tauri/tauri.conf.json",
+      kind: "code",
+      tags: ["dev"],
+      pinned: false,
+      copy_count: 4,
+    },
   ];
+  const extra: ClipCard[] = [];
+  for (let i = 0; i < 100; i += 1) extra.push(seedCard(200 + i));
+  return [...featured, ...extra].sort(
+    (a, b) => b.last_seen_at - a.last_seen_at,
+  );
 }
 
 function readState(): MockState | null {
   const raw = new URLSearchParams(window.location.search).get("state");
-  if (
-    raw === "empty" ||
-    raw === "no-results" ||
-    raw === "paused" ||
-    raw === "keyword-only" ||
-    raw === "dark" ||
-    raw === "light"
-  ) {
-    return raw;
-  }
-  return null;
+  const allowed: MockState[] = [
+    "empty",
+    "no-results",
+    "paused",
+    "keyword-only",
+    "dark",
+    "light",
+    "nopins",
+  ];
+  return allowed.includes(raw as MockState) ? (raw as MockState) : null;
 }
 
 function applyTheme(state: MockState | null) {
   const root = document.documentElement;
-  if (state === "dark") {
-    root.classList.add("dark");
-    root.classList.remove("light");
-  } else if (state === "light") {
-    root.classList.add("light");
-    root.classList.remove("dark");
-  }
+  const preferDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const dark = state === "dark" || (state !== "light" && preferDark);
+  root.classList.toggle("dark", dark);
+  root.classList.toggle("light", !dark);
 }
 
 export function createMockApi(): CliptraceApi {
   const state = readState();
   applyTheme(state);
   let cards = state === "empty" || state === "no-results" ? [] : sampleCards();
+  if (state === "nopins") {
+    cards = cards.map((c) => ({ ...c, pinned: false }));
+  }
   const paused = state === "paused";
 
   function tagsFrom(list: ClipCard[]): TagCount[] {
     const counts = new Map<string, number>();
     for (const card of list) {
-      for (const tag of card.tags) {
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-      }
+      for (const tag of card.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
     return [...counts.entries()].map(([name, count]) => ({ name, count }));
   }
@@ -143,7 +264,9 @@ export function createMockApi(): CliptraceApi {
       if (args.tab === "pinned") list = list.filter((c) => c.pinned);
       if (args.tag) {
         const needle = args.tag.toLowerCase();
-        list = list.filter((c) => c.tags.some((t) => t.toLowerCase().includes(needle)));
+        list = list.filter((c) =>
+          c.tags.some((t) => t.toLowerCase().includes(needle)),
+        );
       }
       if (args.query.trim()) {
         const q = args.query.toLowerCase();
@@ -151,14 +274,19 @@ export function createMockApi(): CliptraceApi {
           (c) =>
             c.preview.toLowerCase().includes(q) ||
             c.body.toLowerCase().includes(q) ||
-            c.tags.some((t) => t.toLowerCase().includes(q)),
+            c.tags.some((t) => t.toLowerCase().includes(q)) ||
+            c.source_exe.toLowerCase().includes(q),
         );
       }
       if (state === "no-results") list = [];
       return {
         cards: list.slice(args.offset, args.offset + 50),
         pinned: cards.filter((c) => c.pinned).length,
-        note: state === "keyword-only" ? "keyword-only: onnxruntime.dll missing" : null,
+        total: cards.length,
+        note:
+          state === "keyword-only"
+            ? "keyword-only: onnxruntime.dll missing"
+            : null,
         paused,
       };
     },
@@ -168,16 +296,25 @@ export function createMockApi(): CliptraceApi {
     async setPinned(id, pinned) {
       const card = must(id);
       card.pinned = pinned;
-      return { ...card };
+      return { ...card, tags: [...card.tags] };
     },
     async addTag(id, tag) {
       const card = must(id);
-      if (!card.tags.includes(tag)) card.tags = [...card.tags, tag];
+      const name = tag.trim();
+      if (
+        name &&
+        !card.tags.some((t) => t.toLowerCase() === name.toLowerCase()) &&
+        card.tags.length < 10
+      ) {
+        card.tags = [...card.tags, name];
+      }
       return { ...card, tags: [...card.tags] };
     },
     async removeTag(id, tag) {
       const card = must(id);
-      card.tags = card.tags.filter((t) => t !== tag);
+      card.tags = card.tags.filter(
+        (t) => t.toLowerCase() !== tag.toLowerCase(),
+      );
       return { ...card, tags: [...card.tags] };
     },
     async markClipSecret(id) {
@@ -185,7 +322,7 @@ export function createMockApi(): CliptraceApi {
       card.kind = "secret";
       card.preview = "[secret token …]";
       card.body = "[secret token …]";
-      return { ...card };
+      return { ...card, tags: [...card.tags] };
     },
     async deleteClip(id) {
       cards = cards.filter((c) => c.id !== id);

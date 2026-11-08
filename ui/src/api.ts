@@ -16,6 +16,7 @@ export type ClipCard = {
 export type BrowsePayload = {
   cards: ClipCard[];
   pinned: number;
+  total: number;
   note: string | null;
   paused: boolean;
 };
@@ -49,9 +50,9 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+export type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 
-function createTauriApi(invoke: Invoke): CliptraceApi {
+export function createTauriApi(invoke: Invoke): CliptraceApi {
   return {
     browseClips: (args) =>
       invoke<BrowsePayload>("browse_clips", {
@@ -81,15 +82,8 @@ export function tauriAvailable(): boolean {
 export function getApi(): Promise<CliptraceApi> {
   if (!ready) {
     ready = (async () => {
-      if (isTauri()) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        return createTauriApi(invoke as Invoke);
-      }
-      if (import.meta.env.DEV) {
-        const { createMockApi } = await import("./mock");
-        return createMockApi();
-      }
-      throw new Error("Tauri IPC is not available");
+      const { createMockApi } = await import("./mock");
+      return createMockApi();
     })();
   }
   return ready;

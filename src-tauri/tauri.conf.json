@@ -15,8 +15,8 @@
       {
         "label": "popup",
         "title": "Cliptrace",
-        "width": 760,
-        "height": 560,
+        "width": 680,
+        "height": 500,
         "resizable": false,
         "decorations": false,
         "alwaysOnTop": true,
@@ -28,7 +28,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'"
+      "csp": "default-src 'self'; font-src 'self'; img-src 'self' data:"
     }
   },
   "bundle": {

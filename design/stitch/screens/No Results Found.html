@@ -1,0 +1,770 @@
+<!doctype html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta content="web_blank" name="shell-type" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @layer base {
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        body {
+          overscroll-behavior: none;
+        }
+        main > :first-child {
+          margin-top: 0 !important;
+        }
+        main > :last-child {
+          margin-bottom: 0 !important;
+        }
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              outline: "#6c7a71",
+              "on-tertiary-fixed-variant": "#653e00",
+              "surface-container-high": "#e2e7ff",
+              "primary-fixed-dim": "#4edea3",
+              "secondary-fixed-dim": "#b3d17a",
+              "on-primary-fixed-variant": "#005236",
+              "on-error": "#ffffff",
+              "on-tertiary-container": "#523200",
+              "primary-fixed": "#6ffbbe",
+              tertiary: "#855300",
+              "on-surface-variant": "#3c4a42",
+              "tertiary-container": "#e29100",
+              "inverse-on-surface": "#eef0ff",
+              "on-error-container": "#93000a",
+              "tertiary-fixed-dim": "#ffb95f",
+              "surface-container-highest": "#dae2fd",
+              "surface-variant": "#dae2fd",
+              secondary: "#4d661c",
+              "on-background": "#131b2e",
+              "primary-container": "#10b981",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#283044",
+              "on-tertiary-fixed": "#2a1700",
+              primary: "#006c49",
+              "on-secondary-fixed": "#131f00",
+              "outline-variant": "#bbcabf",
+              "surface-container-low": "#f2f3ff",
+              background: "#faf8ff",
+              "on-primary": "#ffffff",
+              "inverse-primary": "#4edea3",
+              "tertiary-fixed": "#ffddb8",
+              "surface-bright": "#faf8ff",
+              "on-tertiary": "#ffffff",
+              "on-surface": "#131b2e",
+              "on-secondary": "#ffffff",
+              surface: "#faf8ff",
+              "surface-container": "#eaedff",
+              "on-secondary-fixed-variant": "#364e03",
+              "secondary-container": "#ceee93",
+              "on-secondary-container": "#536d22",
+              "surface-container-lowest": "#ffffff",
+              "surface-tint": "#006c49",
+              "on-primary-container": "#00422b",
+              "surface-dim": "#d2d9f4",
+              error: "#ba1a1a",
+              "on-primary-fixed": "#002113",
+              "secondary-fixed": "#ceee93",
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+            spacing: {
+              gutter: "0.75rem",
+              "space-lg": "1.25rem",
+              "space-xl": "1.75rem",
+              "space-md": "0.75rem",
+              "space-xs": "0.25rem",
+              "space-sm": "0.5rem",
+              margin: "1rem",
+            },
+            fontFamily: {
+              "label-sm": ["Space Grotesk"],
+              "body-md": ["Inter"],
+              "headline-md": ["Space Grotesk"],
+              "label-md": ["Space Grotesk"],
+              "headline-sm": ["Space Grotesk"],
+              "body-sm": ["Inter"],
+              "body-lg": ["Inter"],
+              "headline-lg": ["Space Grotesk"],
+              "label-lg": ["Space Grotesk"],
+            },
+            fontSize: {
+              "label-sm": [
+                "0.6875rem",
+                {
+                  lineHeight: "0.875rem",
+                  letterSpacing: "0.04em",
+                  fontWeight: "700",
+                },
+              ],
+              "body-md": [
+                "0.875rem",
+                {
+                  lineHeight: "1.375rem",
+                  letterSpacing: "-0.006em",
+                  fontWeight: "400",
+                },
+              ],
+              "headline-md": [
+                "1.375rem",
+                {
+                  lineHeight: "1.75rem",
+                  letterSpacing: "-0.025em",
+                  fontWeight: "600",
+                },
+              ],
+              "label-md": [
+                "0.75rem",
+                {
+                  lineHeight: "1rem",
+                  letterSpacing: "0.02em",
+                  fontWeight: "600",
+                },
+              ],
+              "headline-sm": [
+                "1.125rem",
+                {
+                  lineHeight: "1.5rem",
+                  letterSpacing: "-0.02em",
+                  fontWeight: "500",
+                },
+              ],
+              "body-sm": [
+                "0.75rem",
+                {
+                  lineHeight: "1.125rem",
+                  letterSpacing: "0em",
+                  fontWeight: "400",
+                },
+              ],
+              "body-lg": [
+                "1rem",
+                {
+                  lineHeight: "1.5rem",
+                  letterSpacing: "-0.011em",
+                  fontWeight: "400",
+                },
+              ],
+              "headline-lg": [
+                "1.75rem",
+                {
+                  lineHeight: "2.25rem",
+                  letterSpacing: "-0.03em",
+                  fontWeight: "600",
+                },
+              ],
+              "label-lg": [
+                "0.875rem",
+                {
+                  lineHeight: "1.25rem",
+                  letterSpacing: "0.01em",
+                  fontWeight: "600",
+                },
+              ],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-background font-body-md text-on-surface antialiased min-h-screen relative overflow-hidden select-none"
+  >
+    <div
+      class="fixed inset-0 bg-gradient-to-br from-surface-container via-surface-container-low to-surface-container-high/40 pointer-events-none -z-10"
+    ></div>
+    <div
+      class="fixed top-1/4 left-1/3 w-96 h-96 rounded-full bg-primary-fixed/20 blur-3xl pointer-events-none -z-10"
+    ></div>
+    <div
+      class="fixed bottom-1/3 right-1/4 w-[420px] h-[420px] rounded-full bg-secondary-fixed/25 blur-3xl pointer-events-none -z-10"
+    ></div>
+    <div
+      class="min-h-screen flex flex-col justify-between items-center p-margin"
+    >
+      <div class="flex-1 flex items-center justify-center w-full">
+        <div
+          class="w-full max-w-[760px] h-[580px] rounded-xl bg-surface-container-lowest/80 backdrop-blur-2xl shadow-[0_24px_48px_-12px_rgba(19,27,46,0.18)] flex flex-col overflow-hidden relative"
+        >
+          <div
+            class="h-10 px-space-md bg-surface-container-low/60 flex items-center justify-between cursor-move"
+          >
+            <div class="flex items-center gap-space-sm">
+              <div
+                class="w-5 h-5 rounded bg-primary-container/20 flex items-center justify-center"
+              >
+                <span class="material-symbols-outlined text-primary text-[14px]"
+                  >content_paste_search</span
+                >
+              </div>
+              <span
+                class="font-label-md text-label-md text-on-surface-variant font-semibold tracking-wide"
+                >Cliptrace</span
+              ><span
+                class="px-space-xs py-0.5 rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface-variant"
+                >v1.4</span
+              >
+            </div>
+            <div class="flex items-center gap-space-xs">
+              <button
+                class="w-7 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <span class="material-symbols-outlined text-[15px]"
+                  >minimize</span
+                ></button
+              ><button
+                class="w-7 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <span class="material-symbols-outlined text-[14px]"
+                  >crop_square</span
+                ></button
+              ><button
+                class="w-7 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-error-container hover:text-on-error-container transition-colors"
+              >
+                <span class="material-symbols-outlined text-[15px]">close</span>
+              </button>
+            </div>
+          </div>
+          <main
+            class="flex-1 w-full overflow-hidden flex flex-col bg-surface-container-lowest/50"
+          >
+            <div class="flex flex-col w-full h-full justify-between">
+              <!-- Top Utility Context & Sub-header -->
+              <div
+                class="px-space-md pt-space-sm pb-space-xs flex flex-col gap-space-xs"
+              >
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-space-sm">
+                    <span
+                      class="flex items-center gap-1 px-space-xs py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant"
+                    >
+                      <span
+                        class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"
+                      ></span>
+                      Local only • 100% on-device
+                    </span>
+                    <span
+                      class="font-label-sm text-label-sm text-outline flex items-center gap-1"
+                    >
+                      <span class="material-symbols-outlined text-[13px]"
+                        >shield</span
+                      >
+                      Encrypted SQLite
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-space-xs">
+                    <span
+                      class="px-space-xs py-0.5 rounded bg-surface-container-high font-label-sm text-label-sm text-on-surface font-semibold shadow-sm"
+                    >
+                      Win + Shift + V
+                    </span>
+                    <button
+                      aria-label="Toggle theme display"
+                      class="w-6 h-6 rounded flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
+                      id="themeToggleBtn"
+                    >
+                      <span class="material-symbols-outlined text-[15px]"
+                        >light_mode</span
+                      >
+                    </button>
+                  </div>
+                </div>
+                <!-- Omni Search Bar Input Field -->
+                <div
+                  class="relative w-full rounded-xl bg-surface-container-lowest shadow-sm flex items-center px-space-md py-space-sm gap-space-sm"
+                >
+                  <div
+                    class="w-6 h-6 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0"
+                  >
+                    <span class="material-symbols-outlined text-[16px]"
+                      >manage_search</span
+                    >
+                  </div>
+                  <input
+                    class="flex-1 bg-transparent border-0 outline-none font-body-md text-body-md text-on-surface placeholder:text-outline font-medium"
+                    id="omniInput"
+                    placeholder="Search keywords, links, credentials..."
+                    type="text"
+                    value="wifi password from starbucks last year"
+                  />
+                  <div class="flex items-center gap-space-xs shrink-0">
+                    <button
+                      class="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
+                      id="clearSearchBtn"
+                    >
+                      <span class="material-symbols-outlined text-[14px]"
+                        >close</span
+                      >
+                    </button>
+                    <kbd
+                      class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-semibold shadow-sm"
+                    >
+                      ESC
+                    </kbd>
+                  </div>
+                </div>
+                <!-- AI Semantic Interpretation Banner -->
+                <div
+                  class="flex items-center justify-between px-space-sm py-1 rounded-lg bg-surface-container-low"
+                >
+                  <div class="flex items-center gap-space-xs min-w-0">
+                    <span
+                      class="material-symbols-outlined text-[15px] text-tertiary-container shrink-0"
+                      >auto_awesome</span
+                    >
+                    <p
+                      class="font-label-sm text-label-sm text-on-surface-variant truncate"
+                    >
+                      <span class="font-semibold text-on-surface"
+                        >Interpreted as:</span
+                      >
+                      Wi-Fi credentials
+                      <span class="text-outline mx-1">•</span>
+                      <span class="font-semibold text-tertiary"
+                        >Timeframe: 2024</span
+                      >
+                      (over 12 months ago)
+                    </p>
+                  </div>
+                  <span
+                    class="px-space-xs py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm shrink-0"
+                  >
+                    Semantic 0.94
+                  </span>
+                </div>
+                <!-- Scoped Categorical Filter Pills -->
+                <div class="flex items-center justify-between pt-1">
+                  <div class="flex items-center gap-space-xs">
+                    <button
+                      class="px-space-sm py-1 rounded-lg bg-surface-container-high text-primary font-label-sm text-label-sm font-semibold flex items-center gap-1 shadow-sm"
+                    >
+                      <span>All</span>
+                      <span
+                        class="px-1 rounded-full bg-surface-container-lowest text-primary text-[10px]"
+                        >0</span
+                      >
+                    </button>
+                    <button
+                      class="px-space-sm py-1 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-sm text-label-sm transition-colors flex items-center gap-1"
+                    >
+                      <span
+                        class="material-symbols-outlined text-[13px] text-tertiary"
+                        >push_pin</span
+                      >
+                      <span>Pinned</span>
+                      <span class="text-outline text-[10px]">0</span>
+                    </button>
+                    <button
+                      class="px-space-sm py-1 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-sm text-label-sm transition-colors flex items-center gap-1"
+                    >
+                      <span class="material-symbols-outlined text-[13px]"
+                        >label</span
+                      >
+                      <span>Tags</span>
+                    </button>
+                    <button
+                      class="px-space-sm py-1 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-sm text-label-sm transition-colors flex items-center gap-1"
+                    >
+                      <span class="material-symbols-outlined text-[13px]"
+                        >lock</span
+                      >
+                      <span>Secrets</span>
+                    </button>
+                  </div>
+                  <span
+                    class="font-label-sm text-label-sm text-outline flex items-center gap-1"
+                  >
+                    <span class="material-symbols-outlined text-[13px]"
+                      >database</span
+                    >
+                    Indexed: 1,420 items
+                  </span>
+                </div>
+              </div>
+              <!-- Zero Results Core Canvas -->
+              <div
+                class="flex-1 px-space-md py-space-xs flex flex-col justify-center items-center text-center overflow-y-auto"
+              >
+                <!-- Visual Centerpiece & Icon Composition -->
+                <div
+                  class="relative w-20 h-20 mb-space-xs flex items-center justify-center"
+                >
+                  <div
+                    class="absolute inset-0 rounded-2xl bg-gradient-to-tr from-secondary-container/40 via-surface-container to-primary-container/20 blur-md"
+                  ></div>
+                  <div
+                    class="relative w-16 h-16 rounded-2xl bg-surface-container-lowest shadow-md flex items-center justify-center"
+                  >
+                    <!-- Multi-layer Illustrated SVG Vector Badge -->
+                    <svg
+                      class="w-10 h-10 text-primary"
+                      fill="none"
+                      viewbox="0 0 48 48"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <circle
+                        cx="21"
+                        cy="21"
+                        fill="currentColor"
+                        fill-opacity="0.12"
+                        r="13"
+                      ></circle>
+                      <path
+                        d="M21 9C14.3726 9 9 14.3726 9 21C9 27.6274 14.3726 33 21 33C24.0322 33 26.7933 31.8741 28.8995 30.0142L36.4426 37.5574C37.0284 38.1431 37.9782 38.1431 38.5639 37.5574C39.1497 36.9716 39.1497 36.0218 38.5639 35.4361L31.0207 27.8929C32.2606 25.8821 33 23.524 33 21C33 14.3726 27.6274 9 21 9Z"
+                        fill="currentColor"
+                      ></path>
+                      <path
+                        d="M21 16V22L25 24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-width="2"
+                      ></path>
+                    </svg>
+                    <!-- Sparkle & Expired Badge Floaters -->
+                    <span
+                      class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-surface-container-high text-tertiary flex items-center justify-center shadow-sm"
+                    >
+                      <span class="material-symbols-outlined text-[13px]"
+                        >history_toggle_off</span
+                      >
+                    </span>
+                    <span
+                      class="absolute -bottom-1 -left-1 w-5 h-5 rounded-full bg-secondary-container text-secondary flex items-center justify-center shadow-sm"
+                    >
+                      <span class="material-symbols-outlined text-[11px]"
+                        >arrow_back_ios_new</span
+                      >
+                    </span>
+                  </div>
+                </div>
+                <!-- Error/Notice Typographic Lockup -->
+                <div class="max-w-md flex flex-col gap-0.5 mb-space-sm">
+                  <h2
+                    class="font-headline-sm text-headline-sm text-on-surface font-semibold tracking-tight"
+                  >
+                    No matching copies found for
+                    <span class="text-primary font-bold"
+                      >"wifi password..."</span
+                    >
+                  </h2>
+                  <p
+                    class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed"
+                  >
+                    Your clipboard history is retained for
+                    <span class="font-semibold text-on-surface">90 days</span>.
+                    We searched 1,420 items on your device, but found no items
+                    matching this timeframe or context.
+                  </p>
+                </div>
+                <!-- Prescriptive AI Suggestions Box -->
+                <div
+                  class="w-full max-w-lg rounded-xl bg-surface-container-low p-space-sm flex flex-col gap-space-xs text-left mb-space-sm shadow-sm"
+                >
+                  <div class="flex items-center justify-between pb-1">
+                    <span
+                      class="font-label-sm text-label-sm text-on-surface font-semibold flex items-center gap-1.5"
+                    >
+                      <span
+                        class="material-symbols-outlined text-[15px] text-primary"
+                        >tips_and_updates</span
+                      >
+                      Helpful suggestions
+                    </span>
+                    <span class="font-label-sm text-label-sm text-outline"
+                      >Smart Diagnostic</span
+                    >
+                  </div>
+                  <div class="grid grid-cols-1 gap-1">
+                    <div
+                      class="flex items-center justify-between p-1.5 rounded-lg bg-surface-container-lowest/90 hover:bg-surface-container-lowest transition-colors cursor-pointer group"
+                      onclick="applyBroaderSearch()"
+                    >
+                      <div class="flex items-center gap-space-sm min-w-0">
+                        <span
+                          class="w-5 h-5 rounded bg-surface-container flex items-center justify-center text-primary shrink-0"
+                        >
+                          <span class="material-symbols-outlined text-[13px]"
+                            >zoom_out_map</span
+                          >
+                        </span>
+                        <span
+                          class="font-body-sm text-body-sm text-on-surface truncate"
+                        >
+                          Try a broader search:
+                          <span class="font-semibold text-primary"
+                            >"starbucks"</span
+                          >
+                          or
+                          <span class="font-semibold text-primary"
+                            >"wifi password"</span
+                          >
+                        </span>
+                      </div>
+                      <span
+                        class="font-label-sm text-label-sm text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        >Use →</span
+                      >
+                    </div>
+                    <div
+                      class="flex items-center justify-between p-1.5 rounded-lg bg-surface-container-lowest/90 hover:bg-surface-container-lowest transition-colors cursor-pointer group"
+                      onclick="openVaultModal()"
+                    >
+                      <div class="flex items-center gap-space-sm min-w-0">
+                        <span
+                          class="w-5 h-5 rounded bg-surface-container flex items-center justify-center text-tertiary shrink-0"
+                        >
+                          <span class="material-symbols-outlined text-[13px]"
+                            >inventory_2</span
+                          >
+                        </span>
+                        <span
+                          class="font-body-sm text-body-sm text-on-surface truncate"
+                        >
+                          Check older encrypted backups in
+                          <span class="font-semibold text-on-surface"
+                            >Settings &gt; Retention Vault</span
+                          >
+                        </span>
+                      </div>
+                      <span
+                        class="font-label-sm text-label-sm text-outline opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        >Open →</span
+                      >
+                    </div>
+                    <div
+                      class="flex items-center justify-between p-1.5 rounded-lg bg-surface-container-lowest/90 hover:bg-surface-container-lowest transition-colors"
+                    >
+                      <div class="flex items-center gap-space-sm min-w-0">
+                        <span
+                          class="w-5 h-5 rounded bg-surface-container flex items-center justify-center text-secondary shrink-0"
+                        >
+                          <span class="material-symbols-outlined text-[13px]"
+                            >filter_alt</span
+                          >
+                        </span>
+                        <span
+                          class="font-body-sm text-body-sm text-on-surface truncate"
+                          >Filter by source app:</span
+                        >
+                      </div>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button
+                          class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                        >
+                          Chrome
+                        </button>
+                        <button
+                          class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                        >
+                          Slack
+                        </button>
+                        <button
+                          class="px-1.5 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                        >
+                          Settings
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Quick Call to Action Triggers -->
+                <div class="flex items-center gap-space-sm">
+                  <button
+                    class="px-space-md py-1.5 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm font-semibold hover:opacity-95 shadow-sm flex items-center gap-space-xs transition-transform active:scale-95"
+                    id="resetSearchBtn"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >replay</span
+                    >
+                    <span>Reset Search</span>
+                    <kbd
+                      class="px-1 rounded bg-on-primary/20 text-on-primary font-label-sm text-[10px]"
+                      >Esc</kbd
+                    >
+                  </button>
+                  <button
+                    class="px-space-md py-1.5 rounded-lg bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold hover:bg-surface-container-highest transition-colors flex items-center gap-space-xs"
+                    id="adjustRetentionBtn"
+                  >
+                    <span class="material-symbols-outlined text-[14px]"
+                      >tune</span
+                    >
+                    <span>Adjust Retention Limit</span>
+                  </button>
+                </div>
+              </div>
+              <!-- Operational Windows Inspector Bar -->
+              <div
+                class="h-9 px-space-md bg-surface-container-low/70 flex items-center justify-between"
+              >
+                <div
+                  class="flex items-center gap-space-md font-label-sm text-label-sm text-on-surface-variant"
+                >
+                  <span class="flex items-center gap-1">
+                    <kbd
+                      class="px-1 py-0.5 rounded bg-surface-container text-on-surface font-semibold shadow-sm"
+                      >Esc</kbd
+                    >
+                    <span class="text-outline">to clear query</span>
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <kbd
+                      class="px-1 py-0.5 rounded bg-surface-container text-on-surface font-semibold shadow-sm"
+                      >↑↓</kbd
+                    >
+                    <span class="text-outline">navigate</span>
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <kbd
+                      class="px-1 py-0.5 rounded bg-surface-container text-on-surface font-semibold shadow-sm"
+                      >↵</kbd
+                    >
+                    <span class="text-outline">paste</span>
+                  </span>
+                </div>
+                <div
+                  class="flex items-center gap-space-sm font-label-sm text-label-sm text-outline"
+                >
+                  <span class="flex items-center gap-1">
+                    <span
+                      class="w-1.5 h-1.5 rounded-full bg-primary-container"
+                    ></span>
+                    Sync Ready
+                  </span>
+                  <span>•</span>
+                  <span
+                    class="hover:text-on-surface cursor-pointer transition-colors"
+                    onclick="openVaultModal()"
+                    >Settings</span
+                  >
+                </div>
+              </div>
+              <!-- Script for Quick Interactive Response Feedback -->
+              <script>
+                const input = document.getElementById("omniInput");
+                const clearBtn = document.getElementById("clearSearchBtn");
+                const resetBtn = document.getElementById("resetSearchBtn");
+                const retentionBtn =
+                  document.getElementById("adjustRetentionBtn");
+
+                function resetInput() {
+                  if (input) {
+                    input.value = "";
+                    input.focus();
+                  }
+                }
+
+                if (clearBtn) clearBtn.addEventListener("click", resetInput);
+                if (resetBtn) resetBtn.addEventListener("click", resetInput);
+
+                window.addEventListener("keydown", (e) => {
+                  if (e.key === "Escape") {
+                    resetInput();
+                  }
+                });
+
+                function applyBroaderSearch() {
+                  if (input) {
+                    input.value = "starbucks";
+                    input.focus();
+                  }
+                }
+
+                function openVaultModal() {
+                  if (input) {
+                    input.value = "";
+                    input.placeholder = "Opening Settings > Retention Vault...";
+                    setTimeout(() => {
+                      input.placeholder =
+                        "Search keywords, links, credentials...";
+                    }, 1500);
+                  }
+                }
+
+                if (retentionBtn) {
+                  retentionBtn.addEventListener("click", () => {
+                    openVaultModal();
+                  });
+                }
+              </script>
+            </div>
+          </main>
+        </div>
+      </div>
+      <footer
+        class="w-full max-w-2xl h-12 mb-space-xs rounded-xl bg-surface-container-lowest/65 backdrop-blur-xl shadow-[0_8px_24px_-6px_rgba(19,27,46,0.08)] flex items-center justify-between px-space-md"
+      >
+        <div class="flex items-center gap-space-sm">
+          <button
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]">grid_view</span>
+          </button>
+          <div class="h-4 w-px bg-outline-variant/30"></div>
+          <button
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]"
+              >terminal</span
+            ></button
+          ><button
+            class="w-8 h-8 rounded-lg bg-surface-container-high text-primary flex items-center justify-center"
+          >
+            <span class="material-symbols-outlined text-[20px]"
+              >content_paste</span
+            ></button
+          ><button
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+          >
+            <span class="material-symbols-outlined text-[20px]">folder</span>
+          </button>
+        </div>
+        <div
+          class="flex items-center gap-space-sm font-label-sm text-label-sm text-on-surface-variant"
+        >
+          <span class="flex items-center gap-space-xs"
+            ><span class="material-symbols-outlined text-[16px] text-primary"
+              >wifi</span
+            ><span class="material-symbols-outlined text-[16px]">volume_up</span
+            ><span class="material-symbols-outlined text-[16px]"
+              >battery_charging_full</span
+            ></span
+          ><span>10:42 AM</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
