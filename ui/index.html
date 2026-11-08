@@ -4,49 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cliptrace</title>
-    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="shell" role="dialog" aria-label="Clipboard history">
-      <p id="paused" class="paused" hidden>Capture paused</p>
-      <header class="search">
-        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 16l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <label class="sr" for="q">Search clips</label>
-        <input id="q" type="search" role="combobox" aria-expanded="false" aria-controls="suggest" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search clips" />
-        <ul id="suggest" class="suggest" role="listbox" hidden></ul>
-      </header>
-      <div class="tabs" role="tablist" aria-label="Views">
-        <button id="tab-recent" type="button" role="tab" aria-selected="true" aria-controls="list">Recent</button>
-        <button id="tab-pinned" type="button" role="tab" aria-selected="false" aria-controls="list">Pinned <span id="pin-count" class="count"></span></button>
-        <button id="tab-tags" type="button" role="tab" aria-selected="false" aria-controls="tag-grid">Tags</button>
-      </div>
-      <p id="note" class="note" hidden></p>
-      <div class="split">
-        <div class="list-col">
-          <div id="tag-grid" class="tag-grid" hidden></div>
-          <p id="empty" class="empty" hidden></p>
-          <ul id="list" class="list" role="listbox" aria-label="Clips"></ul>
-        </div>
-        <aside id="preview" class="preview" aria-live="polite"></aside>
-      </div>
-      <footer>
-        <span>↑↓ navigate</span>
-        <span>Enter copy</span>
-        <span>Ctrl+P pin</span>
-        <span>Ctrl+T tag</span>
-        <span>Ctrl+L mark secret</span>
-        <span>Del delete</span>
-        <span>Esc close</span>
-      </footer>
-      <div id="toast" class="toast" role="status" hidden></div>
-      <div id="confirm" class="confirm" hidden>
-        <p id="confirm-text"></p>
-        <div class="confirm-actions">
-          <button id="confirm-cancel" type="button">Cancel</button>
-          <button id="confirm-ok" type="button">Mark as secret</button>
-        </div>
-      </div>
-    </div>
-    <script src="app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -26,7 +26,7 @@ Every copy is stored and indexed on-device, so you can type
 | Time parsing | `chrono` + small custom parser in `timeparse.rs` |
 | Secret storage | DPAPI (`CryptProtectData`) per-value encryption |
 | Config | `toml` + `serde`, paths via `dirs` |
-| UI (last) | Tauri v2, plain TS or Svelte |
+| frontend | React + TS + Tailwind (Vite) |
 
 Fallback: if `ort`/ONNX loading blocks progress for more than ~90 minutes,
 stop and propose a switch to C#/.NET 8. Architecture is identical.
@@ -135,7 +135,7 @@ CREATE TABLE clip_embeddings (
 - One process: tray + clipboard listener + embed worker + hourly purge.
 - Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar.
 - Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
-- System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
+- frontend: React + TS + Tailwind (Vite). System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
 - Opens on Recent with the first row selected and the search box focused. Empty search browses; typing ranks.
 - Tabs: Recent, Pinned (count), Tags. Search stays inside the current tab. `#` offers tag autocomplete.
 - List plus preview. Secrets stay masked. Enter copies the real value, toasts “Copied”, then hides.
