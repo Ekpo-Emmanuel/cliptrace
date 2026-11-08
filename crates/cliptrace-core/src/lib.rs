@@ -28,7 +28,7 @@ pub use secrets::{
 pub use search::{escape_fts_query, format_local_ms, fts_or_query, relative_time};
 pub use store::{
     EMBED_DIMS, EMBED_MODEL, NewClip, RescanReport, SEARCH_TEXT_CHARS, SearchHit, Store, StoreError,
-    StoredEmbedding, TagCount, UpsertOutcome, clip_hash, normalize_text,
+    ClipCard, StoredEmbedding, TagCount, UpsertOutcome, clip_hash, normalize_text,
 };
 pub use tags::{BrowseFilter, MAX_TAG_CHARS, MAX_TAGS_PER_CLIP, normalize_tag, parse_hash_tags};
 pub use timeparse::{ParsedQuery, local_from_unix_ms, parse_time_phrase};

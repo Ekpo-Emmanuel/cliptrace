@@ -131,11 +131,16 @@ CREATE TABLE clip_embeddings (
 5. Print: id, absolute local time, relative time, source exe, 60-char preview.
 6. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
 
-### popup (M7)
+### popup (M7, M8b)
 - One process: tray + clipboard listener + embed worker + hourly purge.
-- Named mutex single instance. Borderless always-on-top popup, skip taskbar.
+- Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar.
 - Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
-- Plain HTML/TS UI. Debounced hybrid search. Enter copies (DPAPI) and hides. Esc / focus loss hide.
+- System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
+- Opens on Recent with the first row selected and the search box focused. Empty search browses; typing ranks.
+- Tabs: Recent, Pinned (count), Tags. Search stays inside the current tab. `#` offers tag autocomplete.
+- List plus preview. Secrets stay masked. Enter copies the real value, toasts “Copied”, then hides.
+- Pin, tag, mark-secret (one-way confirm), delete (5-second undo). Recent rows cached in process for a fast first paint.
+- Capture paused shows in the popup when the tray pause item is on.
 - Never show raw secrets. `autostart` / `no-autostart` write HKCU Run.
 
 ### secrets (M6)
@@ -167,6 +172,7 @@ Work one milestone at a time. Commit after each one passes.
 | M6 | Secrets | Fake `sk_live_...` copy is stored encrypted, not findable by its characters, findable by "stripe key", purged after TTL |
 | M7 | Popup UI | Ctrl+Alt+V (configurable `hotkey`) opens a search box, Enter copies the result back and closes |
 | M8a | Pins/tags/delete data | pin survives purge; tag FTS + `#tag`; mark-secret/delete wipe plaintext from `.db`/`-wal`; CLI list/tags; no UI yet |
+| M8b | Popup redesign | Recent / Pinned / Tags, list plus preview, keyboard actions, light and dark, no raw secrets on screen |
 
 M1-M5 are the core product. If time runs short, cut from the bottom.
 

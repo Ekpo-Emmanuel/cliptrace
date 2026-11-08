@@ -18,10 +18,11 @@ pub fn hybrid_search(
     now_ms: i64,
     limit: usize,
     query_vector: Option<&[f32]>,
+    scope: &BrowseFilter,
 ) -> Result<HybridOutcome, StoreError> {
     let (stripped, hash_tags) = parse_hash_tags(query);
     let parsed = parse_time_phrase(&stripped, local_from_unix_ms(now_ms));
-    let mut filter = BrowseFilter::default();
+    let mut filter = scope.clone();
     filter.tags.extend(hash_tags);
     let pool = limit.max(50);
     let keyword_hits =

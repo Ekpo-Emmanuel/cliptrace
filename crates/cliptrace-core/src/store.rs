@@ -97,6 +97,20 @@ pub struct TagCount {
     pub count: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct ClipCard {
+    pub id: i64,
+    pub last_seen_at: i64,
+    pub source_exe: String,
+    pub window_title: String,
+    pub preview: String,
+    pub body: String,
+    pub kind: String,
+    pub tags: Vec<String>,
+    pub pinned: bool,
+    pub copy_count: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewClip {
     pub content: String,
@@ -317,6 +331,60 @@ impl Store {
         binds.push(Value::Integer(offset.max(0)));
         let mut stmt = self.conn.prepare(&sql)?;
         map_hits(stmt.query_map(params_from_iter(binds), hit_from_row)?)
+    }
+
+    pub fn list_cards(
+        &self,
+        offset: i64,
+        limit: i64,
+        filter: &BrowseFilter,
+    ) -> Result<Vec<ClipCard>, StoreError> {
+        let extra = browse_clause(filter);
+        let sql = format!(
+            "SELECT {CARD_COLS}
+             FROM clips c
+             WHERE 1=1{extra}
+             ORDER BY c.last_seen_at DESC
+             LIMIT ? OFFSET ?"
+        );
+        let mut binds = Vec::new();
+        push_tag_binds(&mut binds, filter);
+        binds.push(Value::Integer(limit.max(1)));
+        binds.push(Value::Integer(offset.max(0)));
+        self.query_cards(&sql, binds)
+    }
+
+    pub fn cards_for_ids(&self, ids: &[i64]) -> Result<Vec<ClipCard>, StoreError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let marks = vec!["?"; ids.len()].join(",");
+        let sql = format!("SELECT {CARD_COLS} FROM clips c WHERE c.id IN ({marks})");
+        let binds = ids.iter().copied().map(Value::Integer).collect();
+        let mut cards = self.query_cards(&sql, binds)?;
+        cards.sort_by_key(|card| ids.iter().position(|id| *id == card.id).unwrap_or(usize::MAX));
+        Ok(cards)
+    }
+
+    pub fn pinned_count(&self) -> Result<i64, StoreError> {
+        let n = self.conn.query_row(
+            "SELECT COUNT(*) FROM clips WHERE pinned_at IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(n)
+    }
+
+    fn query_cards(&self, sql: &str, binds: Vec<Value>) -> Result<Vec<ClipCard>, StoreError> {
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params_from_iter(binds), card_from_row)?;
+        let mut cards = Vec::new();
+        for row in rows {
+            let mut card = row?;
+            card.tags = self.clip_tags(card.id)?;
+            cards.push(card);
+        }
+        Ok(cards)
     }
 
     pub fn list_tags(&self) -> Result<Vec<TagCount>, StoreError> {
@@ -900,6 +968,66 @@ pub struct RescanReport {
 const HIT_COLS: &str = "c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, ''),
                         c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, ''),
                         COALESCE(c.tags_text, ''), CASE WHEN c.pinned_at IS NOT NULL THEN 1 ELSE 0 END";
+
+const CARD_COLS: &str = "c.id, c.last_seen_at, c.copy_count, COALESCE(c.source_exe, ''),
+                         COALESCE(c.window_title, ''), COALESCE(c.content, ''),
+                         c.is_secret, COALESCE(c.kind, ''), COALESCE(c.secret_hint, ''),
+                         CASE WHEN c.pinned_at IS NOT NULL THEN 1 ELSE 0 END";
+
+fn card_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClipCard> {
+    let content: String = row.get(5)?;
+    let is_secret: i64 = row.get(6)?;
+    let kind_col: String = row.get(7)?;
+    let hint: String = row.get(8)?;
+    let pinned: i64 = row.get(9)?;
+    let title: String = row.get(4)?;
+    let preview = hit_preview(is_secret, &kind_col, &hint, &content);
+    let body = if is_secret == 1 {
+        preview.clone()
+    } else {
+        content.clone()
+    };
+    let title = if is_secret == 1 {
+        crate::secrets::redact_secrets(&title)
+    } else {
+        title
+    };
+    Ok(ClipCard {
+        id: row.get(0)?,
+        last_seen_at: row.get(1)?,
+        copy_count: row.get(2)?,
+        source_exe: row.get(3)?,
+        window_title: title,
+        preview,
+        body,
+        kind: display_kind(is_secret, &kind_col, &content),
+        tags: Vec::new(),
+        pinned: pinned == 1,
+    })
+}
+
+fn display_kind(is_secret: i64, kind_col: &str, content: &str) -> String {
+    if is_secret == 1 {
+        return "secret".into();
+    }
+    if kind_col == "url"
+        || content.starts_with("http://")
+        || content.starts_with("https://")
+    {
+        return "link".into();
+    }
+    if looks_like_code(content) {
+        return "code".into();
+    }
+    "text".into()
+}
+
+fn looks_like_code(text: &str) -> bool {
+    let lines = text.lines().count();
+    let has_block = text.contains('{') && text.contains('}');
+    let indented = text.lines().filter(|l| l.starts_with("    ") || l.starts_with('\t')).count();
+    has_block || (lines >= 3 && indented >= 2)
+}
 
 fn hit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SearchHit> {
     let content: String = row.get(3)?;

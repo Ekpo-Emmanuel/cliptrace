@@ -12,8 +12,8 @@
       {
         "label": "popup",
         "title": "Cliptrace",
-        "width": 440,
-        "height": 540,
+        "width": 760,
+        "height": 560,
         "resizable": false,
         "decorations": false,
         "alwaysOnTop": true,
