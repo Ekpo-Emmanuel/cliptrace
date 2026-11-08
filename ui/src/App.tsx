@@ -43,12 +43,14 @@ export default function App() {
   const pendingDel = useRef<Map<number, number>>(new Map());
   const queryRef = useRef(query);
   const tabRef = useRef(tab);
-  const loadRef = useRef<(
-    reset: boolean,
-    q?: string,
-    nextTab?: Tab,
-    keepSelection?: boolean,
-  ) => Promise<void>>(async () => {});
+  const loadRef = useRef<
+    (
+      reset: boolean,
+      q?: string,
+      nextTab?: Tab,
+      keepSelection?: boolean,
+    ) => Promise<void>
+  >(async () => {});
   const [copied, setCopied] = useState(false);
   const [errToast, setErrToast] = useState<string | null>(null);
   const [undoId, setUndoId] = useState<number | null>(null);
@@ -57,7 +59,12 @@ export default function App() {
   tabRef.current = tab;
 
   const load = useCallback(
-    async (reset: boolean, q = query, nextTab = tab, keepSelection = !reset) => {
+    async (
+      reset: boolean,
+      q = query,
+      nextTab = tab,
+      keepSelection = !reset,
+    ) => {
       const api = apiRef.current ?? (await getApi());
       apiRef.current = api;
       const my = ++seq.current;
@@ -92,7 +99,7 @@ export default function App() {
         (payload.note != null && payload.note.startsWith("keyword-only"));
       setNote(
         keyword
-          ? payload.note ?? "keyword-only: embeddings unavailable"
+          ? (payload.note ?? "keyword-only: embeddings unavailable")
           : payload.note,
       );
       setPaused(st?.paused ?? payload.paused);
