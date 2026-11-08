@@ -3,6 +3,7 @@ import type {
   BrowsePayload,
   ClipCard,
   CliptraceApi,
+  Settings,
   TagCount,
 } from "./api";
 
@@ -236,6 +237,17 @@ function applyTheme(state: MockState | null) {
 }
 
 export function createMockApi(): CliptraceApi {
+  let settings: Settings = {
+    paused: false,
+    keyword_only: false,
+    hotkey: "Ctrl+Alt+V",
+    secret_ttl_hours: 24,
+    retention_days: 90,
+    blocklist: ["keepass.exe", "1password.exe"],
+    autostart: false,
+    data_dir: "C:\Users\you\AppData\Local\Cliptrace",
+    version: "0.1.0",
+  };
   const state = readState();
   applyTheme(state);
   let cards = state === "empty" || state === "no-results" ? [] : sampleCards();
@@ -332,6 +344,14 @@ export function createMockApi(): CliptraceApi {
     },
     async hidePopup() {},
     async startDrag() {},
+    async setMode() {},
+    async getSettings() {
+      return { ...settings, blocklist: [...settings.blocklist] };
+    },
+    async updateSettings(patch) {
+      settings = { ...settings, ...patch };
+      return { ...settings, blocklist: [...settings.blocklist] };
+    },
     async stageDelete(_id) {
       void _id;
     },

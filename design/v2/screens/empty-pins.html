@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptrace — No pins (full view)</title>
+<script>
+(function(){var d=document.documentElement,q=new URLSearchParams(location.search).get('theme'),t=q;
+try{t=t||localStorage.getItem('cliptrace-theme')}catch(e){}
+d.setAttribute('data-theme',t==='light'?'light':'dark');
+window.ctToggle=function(){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);try{localStorage.setItem('cliptrace-theme',n)}catch(e){}};})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&amp;family=Martian+Mono:wght@300;400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tr{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206}
+.tr,.tr button,.tr input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tr button{cursor:pointer}
+.tr .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tr :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tr .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tr input::placeholder{color:var(--faint)}
+.tr .wm{font-weight:800;font-size:19px;letter-spacing:-0.03em;line-height:1}
+.tr .seg{flex:none;display:flex;align-items:center;gap:2px;height:30px;padding:2px;box-sizing:border-box;border:1px solid var(--line);border-radius:4px}
+.tr .flt{height:24px;padding:0 10px;border:0;border-radius:2px;background:transparent;color:var(--faint);font-family:'Martian Mono',monospace;font-size:10.5px;display:inline-flex;align-items:center;gap:7px;text-decoration:none}
+.tr .flt:hover{color:var(--text)}
+.tr .flt.on{color:var(--text);background:var(--raise)}
+.tr .flt .dot{width:5px;height:5px;border-radius:50%;border:1px solid var(--line)}
+.tr .flt .dia{width:5px;height:5px;transform:rotate(45deg);border:1px solid var(--line);border-radius:1px}
+.tr .flt.on .dot,.tr .flt.on .dia{background:var(--accent);border-color:var(--accent);box-shadow:0 0 6px var(--accent)}
+.tr .flt .c{color:var(--faint)}
+.tr .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:3px;color:var(--muted);text-decoration:none}
+.tr .ico:hover{background:var(--raise);color:var(--accent)}
+.tr .key{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--muted)}
+.tr .gh{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 14px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--text);font-size:14px;font-weight:500;text-decoration:none}
+.tr .gh:hover{background:var(--raise);color:var(--text);border-color:var(--faint)}
+.tr .day{display:grid;grid-template-columns:58px 26px minmax(0,1fr);height:34px;align-items:end}
+.tr .day .lbl{grid-column:3;padding-bottom:8px;font-family:'Martian Mono',monospace;font-size:10px;color:var(--faint)}
+.tr .slot{display:grid;grid-template-columns:58px 26px minmax(0,1fr);height:62px}
+.tr .sp{position:relative}
+.tr .sp::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;transform:translateX(-50%);background:repeating-linear-gradient(to bottom,var(--line) 0 3px,transparent 3px 8px)}
+.tr .hd{position:absolute;left:50%;top:21px;width:8px;height:8px;box-sizing:border-box;border:1.5px dashed var(--faint);border-radius:1px;background:var(--bg);transform:translate(-50%,-50%) rotate(45deg)}
+.tr .bar{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:0 12px}
+.tr .bar i{display:block;height:7px;border-radius:1px;background:repeating-linear-gradient(135deg,var(--line) 0 2px,transparent 2px 5px)}
+.tr .stage{position:relative;overflow:hidden}
+.tr .stage::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,var(--line) 1px,transparent 1.3px);background-size:20px 20px;-webkit-mask-image:linear-gradient(200deg,#000 0%,transparent 70%);mask-image:linear-gradient(200deg,#000 0%,transparent 70%);pointer-events:none}
+.tr .bigdia{position:absolute;border:1px solid var(--line);transform:rotate(45deg);pointer-events:none}
+@keyframes slowspin{from{transform:rotate(45deg)}to{transform:rotate(405deg)}}
+.tr .bigdia.lead{border-color:var(--accent);box-shadow:0 0 30px color-mix(in srgb,var(--accent) 22%,transparent),inset 0 0 30px color-mix(in srgb,var(--accent) 12%,transparent);animation:slowspin 60s linear infinite}
+@media (prefers-reduced-motion: reduce){.tr *{animation:none !important}}
+</style>
+<style>
+html{--accent-t:#FFB547;--page:#0B0A08}
+html[data-theme=light]{--accent-t:#985400;--page:#E4DED2}
+html[data-theme=light] .tr,html[data-theme=light] .tq{--bg:#F5F1E8;--panel:#ECE6D9;--raise:#E3DCCB;--line:#D3CABA;--text:#1C1813;--muted:#4F483D;--faint:#6E6556;--ink:#FFF9EF;--bad:#B4321F}
+html[data-theme=light] .tr .scrim,html[data-theme=light] .tq .scrim{background:rgba(40,32,20,.42)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--page) !important;padding:48px 24px;box-sizing:border-box}
+.ct-theme{position:fixed;top:14px;right:14px;font:500 11px 'Martian Mono',ui-monospace,monospace;padding:7px 11px;border-radius:3px;border:1px solid rgba(128,120,100,.45);background:transparent;color:#8C8474;cursor:pointer}
+</style>
+</head>
+<body>
+<button class="ct-theme" type="button" onclick="ctToggle()">light / dark</button>
+<div class="tr" style="--accent: var(--accent-t); width: 880px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--line)">
+<span class="wm" aria-label="Cliptrace">clip<span style="color: var(--accent)">trace</span></span>
+<span aria-hidden="true" style="width: 1px; height: 22px; background: var(--line)"></span>
+<label for="ep-search" class="sr">Search pinned clips</label>
+<input id="ep-search" type="search" placeholder="Search pinned…" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; letter-spacing: -0.01em; color: var(--text); outline: none">
+<div role="group" aria-label="Show" class="seg">
+<a class="flt" href="recent.html"><span class="dot" aria-hidden="true"></span>all<span class="c">109</span></a>
+<button type="button" class="flt on" aria-pressed="true"><span class="dia" aria-hidden="true"></span>pinned<span class="c">0</span></button>
+</div>
+<a class="ico" href="empty-pins-compact.html" aria-label="Collapse to quick paste" title="Collapse to quick paste (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg></a>
+</header>
+
+<div style="display: flex; flex: 1; min-height: 0">
+
+<nav aria-label="Pinned clips, none yet" style="width: 344px; flex: none; border-right: 1px solid var(--line); overflow: hidden; -webkit-mask-image: linear-gradient(#000 45%, transparent 95%); mask-image: linear-gradient(#000 45%, transparent 95%)">
+<div class="day"><span></span><span class="sp" aria-hidden="true"></span><span class="lbl">pinned · 0 of 9 slots</span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">1</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 78%"></i><i style="width: 34%"></i></span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">2</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 62%"></i><i style="width: 28%"></i></span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">3</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 84%"></i><i style="width: 40%"></i></span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">4</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 55%"></i><i style="width: 22%"></i></span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">5</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 70%"></i><i style="width: 30%"></i></span></div>
+<div class="slot" aria-hidden="true"><span class="m" style="padding-top: 15px; text-align: right; font-size: 10px; color: var(--faint)">6</span><span class="sp"><span class="hd"></span></span><span class="bar"><i style="width: 66%"></i><i style="width: 26%"></i></span></div>
+</nav>
+
+<section aria-label="About pins" class="stage" style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 26px; padding: 30px 40px 30px 36px">
+<span class="bigdia" aria-hidden="true" style="width: 210px; height: 210px; right: -70px; top: -60px"></span>
+<span class="bigdia lead" aria-hidden="true" style="width: 120px; height: 120px; right: 34px; top: 40px"></span>
+<span class="bigdia" aria-hidden="true" style="width: 54px; height: 54px; right: 150px; top: 168px"></span>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 12px; max-width: 330px">
+<span class="m" style="font-size: 10px; color: var(--accent)">pinned · 0</span>
+<h1 style="margin: 0; font-size: 44px; font-weight: 600; letter-spacing: -0.035em; line-height: 1; font-variation-settings: 'opsz' 96">Nothing<br>pinned.</h1>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted)">Pins sit above the trace and never fall off the end. Keep the things you paste every week: an address, a sign-off, a snippet.</p>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; border-top: 1px solid var(--line); max-width: 400px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px">
+<span style="flex: 1">Select any clip, then</span><span class="key">Ctrl</span><span class="key">P</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); font-size: 14px">
+<span style="flex: 1">Pins take the first quick-paste slots</span><span class="key">Alt</span><span class="key">1–9</span>
+</div>
+</div>
+
+<div style="position: relative">
+<a class="gh" href="recent.html">Browse all 109 clips<span class="m" aria-hidden="true" style="font-size: 12px; color: var(--accent)">→</span></a>
+</div>
+</section>
+</div>
+</div>
+</body>
+</html>

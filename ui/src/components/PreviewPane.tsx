@@ -1,20 +1,12 @@
-import { useEffect, useState, type MouseEvent } from "react";
 import type { ClipCard, TagCount } from "../api";
-import {
-  IconCopy,
-  IconEye,
-  IconEyeOff,
-  IconLink,
-  IconLock,
-  IconPin,
-  IconShield,
-  IconTrash,
-} from "../icons";
+import { IconCopy, IconLock, IconPin, IconTrash } from "../icons";
 import { kindMark } from "../lib/kind";
+import { relTime } from "../lib/time";
 import { TagEditor } from "./TagEditor";
 
 type Props = {
   card: ClipCard | undefined;
+  position: number;
   allTags: TagCount[];
   copied: boolean;
   onCopy: () => void;
@@ -26,57 +18,7 @@ type Props = {
 };
 
 function sourceName(exe: string) {
-  return exe.replace(/\.exe$/i, "") || "Unknown";
-}
-
-function copiedLabel(ms: number, count: number) {
-  const d = new Date(ms);
-  const date = d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  const time = d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const times = count === 1 ? "once" : `${count} times`;
-  return `Copied ${date} · ${time} · ${times}`;
-}
-
-function CopyBtn({
-  onCopy,
-  copied,
-  inverse,
-}: {
-  onCopy: () => void;
-  copied: boolean;
-  inverse?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`font-label-xs inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 py-1 ${
-        inverse
-          ? "text-primary-fixed-dim hover:bg-white/10"
-          : "text-primary hover:bg-primary/10"
-      }`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onCopy();
-      }}
-    >
-      <IconCopy className="h-3 w-3" />
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
-
-function bodyClick(onCopy: () => void) {
-  return (e: MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    onCopy();
-  };
+  return exe.replace(/\.exe$/i, "") || "unknown";
 }
 
 function parseLink(raw: string) {
@@ -87,156 +29,85 @@ function parseLink(raw: string) {
   }
 }
 
-function SecretBody({
-  card,
-  copied,
-  onCopy,
-}: {
-  card: ClipCard;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    setShown(false);
-  }, [card.id]);
-
-  return (
-    <div
-      className="cursor-pointer rounded-md bg-amber/10 p-space-sm"
-      onClick={bodyClick(onCopy)}
-    >
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="font-label-xs uppercase tracking-wide text-tertiary">
-          Secret
-        </span>
-        <span className="font-label-xs rounded-full bg-tertiary-container px-1.5 py-px text-on-tertiary-container">
-          Sensitive
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <p
-          className={
-            shown
-              ? "font-mono min-w-0 flex-1 break-all text-[12px] text-tertiary"
-              : "font-mono min-w-0 flex-1 text-[15px] tracking-[0.2em] text-tertiary"
-          }
-        >
-          {shown ? card.preview : "••••••••••••••••"}
-        </p>
-        <button
-          type="button"
-          className="rounded-md p-1 text-tertiary hover:bg-amber/20"
-          aria-label={shown ? "Hide secret hint" : "Show secret hint"}
-          onClick={() => setShown((v) => !v)}
-        >
-          {shown ? (
-            <IconEyeOff className="h-3.5 w-3.5" />
-          ) : (
-            <IconEye className="h-3.5 w-3.5" />
-          )}
-        </button>
-        <CopyBtn onCopy={onCopy} copied={copied} />
-      </div>
-    </div>
-  );
-}
-
-function BodyView({
-  card,
-  copied,
-  onCopy,
-}: {
-  card: ClipCard;
-  copied: boolean;
-  onCopy: () => void;
-}) {
+function Content({ card }: { card: ClipCard }) {
   if (card.kind === "secret") {
-    return <SecretBody card={card} copied={copied} onCopy={onCopy} />;
+    return (
+      <div>
+        <span className="hatch" style={{ width: 220 }} />
+        <span className="hatch mt-2" style={{ width: 150 }} />
+        <p
+          className="mt-4 font-mono text-[10.5px]"
+          style={{ color: "var(--muted)" }}
+        >
+          {card.preview}
+        </p>
+        <p
+          className="mt-1 font-mono text-[10px]"
+          style={{ color: "var(--faint)" }}
+        >
+          encrypted · kept out of search
+        </p>
+      </div>
+    );
   }
 
   if (card.kind === "code") {
     const lines = card.body.split("\n");
     return (
-      <div
-        className="cursor-pointer overflow-hidden rounded-md bg-slate text-inverse-on-surface"
-        onClick={bodyClick(onCopy)}
-      >
-        <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
-          <span className="font-label-xs uppercase tracking-wide text-inverse-on-surface/60">
-            Code
-          </span>
-          <CopyBtn onCopy={onCopy} copied={copied} inverse />
-        </div>
-        <div className="max-h-56 overflow-auto">
-          <table className="w-full border-collapse font-mono text-[12px] leading-5">
-            <tbody>
-              {lines.map((line, i) => (
-                <tr key={i} className="hover:bg-white/5">
-                  <td className="w-8 select-none px-2 py-0 text-right text-inverse-on-surface/35">
-                    {i + 1}
-                  </td>
-                  <td className="whitespace-pre px-2 py-0">{line || " "}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <table className="border-collapse font-mono text-[11.5px] leading-[1.95]">
+        <tbody>
+          {lines.map((line, i) => (
+            <tr key={i}>
+              <td
+                className="w-8 pr-3 text-right select-none"
+                style={{ color: "var(--accent)" }}
+              >
+                {i + 1}
+              </td>
+              <td className="whitespace-pre" style={{ color: "var(--text)" }}>
+                {line || " "}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     );
   }
 
   if (card.kind === "link") {
     const url = parseLink(card.body);
     return (
-      <div
-        className="cursor-pointer rounded-md border border-primary/20 bg-primary/5 p-space-sm"
-        onClick={bodyClick(onCopy)}
-      >
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="font-label-xs uppercase tracking-wide text-primary">
-            Link
-          </span>
-          <CopyBtn onCopy={onCopy} copied={copied} />
-        </div>
-        <div className="flex items-start gap-2">
-          <IconLink className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div className="min-w-0">
-            <p className="font-label-lg truncate text-on-surface">
-              {url ? url.host : card.body}
-            </p>
-            {url ? (
-              <p className="font-body-sm break-all text-on-surface-variant">
-                {url.pathname}
-                {url.search}
-              </p>
-            ) : null}
-          </div>
-        </div>
+      <div>
+        <p className="text-[46px] leading-none font-extrabold tracking-[-0.04em] [font-variation-settings:'opsz'_96]">
+          {url ? url.host.replace(/^www\./, "") : card.body}
+        </p>
+        <p
+          className="mt-4 font-mono text-[11.5px] leading-[1.6] break-all"
+          style={{ color: "var(--muted)" }}
+        >
+          {card.body}
+        </p>
       </div>
     );
   }
 
+  const long = card.body.length > 160;
   return (
-    <div
-      className="cursor-pointer rounded-md bg-surface-container-low/80 p-space-sm"
-      onClick={bodyClick(onCopy)}
+    <p
+      className={`whitespace-pre-wrap break-words ${
+        long
+          ? "text-[18px] leading-[1.4] font-medium tracking-[-0.01em]"
+          : "text-[31px] leading-[1.16] font-medium tracking-[-0.022em] [font-variation-settings:'opsz'_72]"
+      }`}
     >
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="font-label-xs uppercase tracking-wide text-on-surface-variant">
-          Text
-        </span>
-        <CopyBtn onCopy={onCopy} copied={copied} />
-      </div>
-      <p className="font-body-md whitespace-pre-wrap break-words text-on-surface">
-        {card.body}
-      </p>
-    </div>
+      {card.body}
+    </p>
   );
 }
 
 export function PreviewPane({
   card,
+  position,
   allTags,
   copied,
   onCopy,
@@ -247,52 +118,106 @@ export function PreviewPane({
   onRemoveTag,
 }: Props) {
   if (!card) {
-    return <aside className="h-full bg-surface-container-low/50" />;
+    return (
+      <aside
+        className="h-full border-l"
+        style={{ borderColor: "var(--line)" }}
+      />
+    );
   }
 
   const secret = card.kind === "secret";
-  const { Icon, label, chip } = kindMark(card.kind);
-  const title = card.window_title.trim() || label;
+  const { code } = kindMark(card.kind);
   const app = sourceName(card.source_exe);
+  const title = card.window_title.trim();
+  const size =
+    card.body.length >= 1000
+      ? `${(card.body.length / 1000).toFixed(1)}k chars`
+      : `${card.body.length} chars`;
+
   return (
-    <aside className="flex h-full min-h-0 flex-col border-l border-outline-variant/25 bg-surface-container-lowest">
-      <div className="flex items-start gap-2.5 px-space-md pt-space-md">
-        <span
-          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${chip}`}
+    <aside
+      className="relative flex h-full min-h-0 flex-col overflow-hidden border-l"
+      style={{ borderColor: "var(--line)" }}
+    >
+      <div className="pv-grid pointer-events-none absolute inset-0" />
+      <span className="ghost-num pointer-events-none absolute -top-6 -right-6">
+        {String(position).padStart(2, "0")}
+      </span>
+
+      <div className="relative flex items-center gap-2 px-6 pt-4">
+        <p
+          className="min-w-0 flex-1 truncate font-mono text-[10px]"
+          style={{ color: "var(--faint)" }}
         >
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-label-lg truncate text-on-surface">{title}</h2>
-          <p className="font-label-xs text-on-surface-variant">{app}</p>
+          <span style={{ color: "var(--accent)" }}>{code}</span> {app}
+          {title ? ` / ${title}` : ""}
+        </p>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            className="btn-ico"
+            aria-label="Copy"
+            title="Copy  ↵"
+            onClick={onCopy}
+          >
+            <IconCopy className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="btn-ico"
+            data-on={card.pinned}
+            aria-label={card.pinned ? "Unpin" : "Pin"}
+            title={card.pinned ? "Unpin  Ctrl P" : "Pin  Ctrl P"}
+            onClick={onPin}
+          >
+            <IconPin className="h-4 w-4" />
+          </button>
+          {secret ? null : (
+            <button
+              type="button"
+              className="btn-ico"
+              aria-label="Mark as secret"
+              title="Mark as secret  Ctrl L"
+              onClick={onSecret}
+            >
+              <IconLock className="h-4 w-4" />
+            </button>
+          )}
+          <span
+            className="mx-1 h-4 w-px"
+            style={{ background: "var(--line)" }}
+          />
+          <button
+            type="button"
+            className="btn-ico hover:!text-(--bad)"
+            aria-label="Delete"
+            title="Delete  Del"
+            onClick={onDelete}
+          >
+            <IconTrash className="h-4 w-4" />
+          </button>
         </div>
-        <button
-          type="button"
-          className={`rounded-md p-1.5 ${
-            card.pinned
-              ? "bg-primary/10 text-primary"
-              : "text-on-surface-variant hover:bg-surface-container"
-          }`}
-          aria-label={card.pinned ? "Unpin" : "Pin"}
-          onClick={onPin}
+      </div>
+
+      <div className="relative mt-6 min-h-0 flex-1 overflow-auto px-6">
+        <div
+          className="cursor-pointer"
+          title="Click to copy"
+          onClick={() => {
+            // Dragging to select text must not trigger a copy.
+            if (window.getSelection()?.toString()) return;
+            onCopy();
+          }}
         >
-          <IconPin className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="font-label-xs mt-2 flex flex-wrap items-center gap-2 px-space-md text-on-surface-variant">
-        <span>{copiedLabel(card.last_seen_at, card.copy_count)}</span>
-        {secret ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-primary">
-            <IconShield className="h-3 w-3" />
-            Encrypted
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-space-md min-h-0 flex-1 overflow-auto px-space-md">
-        <BodyView card={card} copied={copied} onCopy={onCopy} />
-        <div className="mt-space-sm">
+          <Content card={card} />
+        </div>
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <button type="button" className="btn-go" onClick={onCopy}>
+            {copied ? "Copied" : "Copy"}
+            <kbd className="keycap">↵</kbd>
+          </button>
+          <span className="h-5 w-px" style={{ background: "var(--line)" }} />
           <TagEditor
             card={card}
             allTags={allTags}
@@ -302,39 +227,25 @@ export function PreviewPane({
         </div>
       </div>
 
-      <div className="mt-auto flex justify-end px-space-md py-space-sm">
-        <div className="font-label-lg inline-flex items-center gap-px rounded-full bg-surface-container-low p-0.5">
-          <button
-            type="button"
-            className={`inline-flex h-8 cursor-pointer items-center gap-1 rounded-full px-3 ${
-              card.pinned
-                ? "text-tertiary"
-                : "text-on-surface-variant hover:bg-surface-container-highest"
-            }`}
-            onClick={onPin}
+      <div
+        className="relative mt-3 grid grid-cols-4 border-t py-3"
+        style={{ borderColor: "var(--line)" }}
+      >
+        {[
+          ["copied", card.copy_count === 1 ? "once" : `${card.copy_count}×`],
+          ["from", app],
+          ["size", secret ? "—" : size],
+          ["last", relTime(card.last_seen_at)],
+        ].map(([k, v], i) => (
+          <div
+            key={k}
+            className="px-6"
+            style={i ? { borderLeft: "1px solid var(--line)" } : undefined}
           >
-            <IconPin className="h-4 w-4" />
-            {card.pinned ? "Unpin" : "Pin"}
-          </button>
-          {secret ? null : (
-            <button
-              type="button"
-              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full px-3 text-on-surface-variant hover:bg-surface-container-highest"
-              onClick={onSecret}
-            >
-              <IconLock className="h-4 w-4" />
-              Hide
-            </button>
-          )}
-          <button
-            type="button"
-            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full px-3 text-error hover:bg-error-container"
-            onClick={onDelete}
-          >
-            <IconTrash className="h-3.5 w-3.5" />
-            Delete
-          </button>
-        </div>
+            <p className="stat-k">{k}</p>
+            <p className="stat-v truncate">{v}</p>
+          </div>
+        ))}
       </div>
     </aside>
   );

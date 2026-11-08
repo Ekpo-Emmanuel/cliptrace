@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptrace — No pins (quick paste)</title>
+<script>
+(function(){var d=document.documentElement,q=new URLSearchParams(location.search).get('theme'),t=q;
+try{t=t||localStorage.getItem('cliptrace-theme')}catch(e){}
+d.setAttribute('data-theme',t==='light'?'light':'dark');
+window.ctToggle=function(){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);try{localStorage.setItem('cliptrace-theme',n)}catch(e){}};})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&amp;family=Martian+Mono:wght@300;400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tq{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206}
+.tq,.tq button,.tq input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tq button{cursor:pointer}
+.tq .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tq :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tq .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tq input::placeholder{color:var(--faint)}
+.tq .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-right:-6px;border-radius:3px;color:var(--muted);text-decoration:none}
+.tq .ico:hover{background:var(--raise);color:var(--accent)}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 70%,transparent)}100%{box-shadow:0 0 0 9px transparent}}
+.tq .day{display:grid;grid-template-columns:44px 22px minmax(0,1fr);height:30px;align-items:end}
+.tq .day .lbl{grid-column:3;padding-bottom:7px;font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--faint)}
+.tq .row{display:grid;grid-template-columns:44px 22px minmax(0,1fr) auto;align-items:stretch;width:100%;height:46px;padding:0 14px 0 0;border:0;background:transparent;color:var(--text);text-align:left}
+.tq .row:hover .body{background:var(--panel)}
+.tq .row.sel .body{background:var(--raise)}
+.tq .n{display:flex;align-items:center;justify-content:flex-end;font-family:'Martian Mono',monospace;font-size:13px;font-weight:500;color:var(--faint)}
+.tq .row.sel .n{color:var(--accent)}
+.tq .sp{position:relative}
+.tq .sp::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line);transform:translateX(-50%)}
+.tq .sp.dash::before{background:repeating-linear-gradient(to bottom,var(--line) 0 3px,transparent 3px 8px)}
+.tq .lit{position:absolute;left:50%;top:0;width:2px;height:23px;transform:translateX(-50%);background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.tq .node{position:absolute;left:50%;top:23px;width:7px;height:7px;box-sizing:border-box;border-radius:50%;background:var(--bg);border:1.5px solid var(--faint);transform:translate(-50%,-50%)}
+.tq .node.sel{width:11px;height:11px;background:var(--accent);border-color:var(--accent);animation:ping 1.6s ease-out infinite}
+.tq .hd{position:absolute;left:50%;top:29px;width:9px;height:9px;box-sizing:border-box;border:1.5px dashed var(--accent);border-radius:1px;background:var(--bg);transform:translate(-50%,-50%) rotate(45deg)}
+.tq .body{display:flex;align-items:center;min-width:0;padding:0 10px;margin:3px 0;border-radius:4px}
+.tq .line{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.005em}
+.tq .line.mono{font-family:'Martian Mono',monospace;font-size:11px;font-weight:400}
+.tq .t{display:flex;align-items:center;font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--faint);padding-left:8px}
+.tq .hatch{display:inline-block;height:12px;vertical-align:middle;background:repeating-linear-gradient(135deg,var(--muted) 0 2px,transparent 2px 5px);border-radius:1px}
+.tq .key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border:1px solid var(--line);border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;color:var(--faint)}
+.tq .hint{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){.tq *{animation:none !important}}
+</style>
+<style>
+html{--accent-t:#FFB547;--page:#0B0A08}
+html[data-theme=light]{--accent-t:#985400;--page:#E4DED2}
+html[data-theme=light] .tr,html[data-theme=light] .tq{--bg:#F5F1E8;--panel:#ECE6D9;--raise:#E3DCCB;--line:#D3CABA;--text:#1C1813;--muted:#4F483D;--faint:#6E6556;--ink:#FFF9EF;--bad:#B4321F}
+html[data-theme=light] .tr .scrim,html[data-theme=light] .tq .scrim{background:rgba(40,32,20,.42)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--page) !important;padding:48px 24px;box-sizing:border-box}
+.ct-theme{position:fixed;top:14px;right:14px;font:500 11px 'Martian Mono',ui-monospace,monospace;padding:7px 11px;border-radius:3px;border:1px solid rgba(128,120,100,.45);background:transparent;color:#8C8474;cursor:pointer}
+</style>
+</head>
+<body>
+<button class="ct-theme" type="button" onclick="ctToggle()">light / dark</button>
+<div class="tq" style="--accent: var(--accent-t); width: 380px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<header style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line)">
+<span aria-hidden="true" style="font-weight: 800; font-size: 17px; letter-spacing: -0.03em; color: var(--accent)">ct</span>
+<label for="epc-search" class="sr">Search clips</label>
+<input id="epc-search" type="search" placeholder="Search the trace…" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 15px; color: var(--text); outline: none">
+<a class="ico" href="empty-pins.html" aria-label="Expand to history and preview" title="Expand (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></a>
+</header>
+
+<div style="flex: 1; min-height: 0; overflow: hidden; padding-top: 4px">
+<div class="day"><span></span><span class="sp dash" aria-hidden="true"></span><span class="lbl">pinned · 0</span></div>
+<div style="display: grid; grid-template-columns: 44px 22px minmax(0, 1fr); height: 64px">
+<span></span>
+<span class="sp dash" aria-hidden="true"><span class="hd"></span></span>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 6px; margin: 4px 14px 4px 0; padding: 0 12px; border: 1px dashed var(--line); border-radius: 4px">
+<span style="font-size: 14px; font-weight: 500; color: var(--text)">No pins yet</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted)">Select a clip and press <span class="key">Ctrl</span><span class="key">P</span></span>
+</div>
+</div>
+<div class="day"><span></span><span class="sp" aria-hidden="true"></span><span class="lbl">recent · today</span></div>
+
+<button type="button" class="row sel" aria-current="true">
+<span class="n">1</span>
+<span class="sp" aria-hidden="true"><span class="lit"></span><span class="node sel"></span></span>
+<span class="body">
+
+<span class="line">Parking is behind the brick building. Gate code is on the fridge note.</span>
+</span>
+<span class="t">04:28</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">2</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line mono">quo.com/pricing</span>
+</span>
+<span class="t">04:26</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">3</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+<span class="line" aria-label="Hidden secret"><span class="hatch" style="width: 120px"></span></span>
+
+</span>
+<span class="t">04:23</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">4</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line">Standup moved to 10:15. Bring the Q4 roadmap draft.</span>
+</span>
+<span class="t">04:19</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">5</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line mono">pub fn list_recent(&amp;self, offset…</span>
+</span>
+<span class="t">04:13</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">6</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line mono">linear.app/cliptrace/issue/CT-142</span>
+</span>
+<span class="t">04:06</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">7</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line">Screenshot · 1280 × 720</span>
+</span>
+<span class="t">03:58</span>
+</button>
+
+<button type="button" class="row" aria-current="false">
+<span class="n">8</span>
+<span class="sp" aria-hidden="true"><span class="node"></span></span>
+<span class="body">
+
+<span class="line">Renewal notice must be given 60 days before the end of term.</span>
+</span>
+<span class="t">03:41</span>
+</button>
+
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 46px; padding: 0 16px; border-top: 1px solid var(--line)">
+<span class="hint"><span class="key">↵</span>Paste</span>
+<span class="hint"><span class="key">Ctrl</span><span class="key">P</span>Pin</span>
+<span style="flex: 1"></span>
+<span class="hint"><span class="key">Tab</span>Expand</span>
+</footer>
+</div>
+</body>
+</html>

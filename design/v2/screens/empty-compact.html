@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptrace — Empty history (quick paste)</title>
+<script>
+(function(){var d=document.documentElement,q=new URLSearchParams(location.search).get('theme'),t=q;
+try{t=t||localStorage.getItem('cliptrace-theme')}catch(e){}
+d.setAttribute('data-theme',t==='light'?'light':'dark');
+window.ctToggle=function(){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);try{localStorage.setItem('cliptrace-theme',n)}catch(e){}};})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&amp;family=Martian+Mono:wght@300;400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tq{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206}
+.tq,.tq button,.tq input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tq button{cursor:pointer}
+.tq .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tq :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tq .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tq input::placeholder{color:var(--faint)}
+.tq .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-right:-6px;border-radius:3px;color:var(--muted);text-decoration:none}
+.tq .ico:hover{background:var(--raise);color:var(--accent)}
+.tq .key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border:1px solid var(--line);border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;color:var(--faint)}
+.tq .hint{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+@keyframes breathe{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}50%{box-shadow:0 0 0 7px transparent}}
+.tq .spine{position:relative}
+.tq .spine .top{position:absolute;left:50%;top:0;height:30px;width:1px;transform:translateX(-50%);background:var(--line)}
+.tq .spine .dash{position:absolute;left:50%;top:38px;bottom:0;width:1px;transform:translateX(-50%);background:repeating-linear-gradient(to bottom,var(--faint) 0 3px,transparent 3px 9px);-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%)}
+.tq .node{position:absolute;left:50%;top:30px;width:11px;height:11px;box-sizing:border-box;border-radius:50%;transform:translate(-50%,-50%);border:1.5px solid var(--accent);background:var(--bg);animation:breathe 2.4s ease-in-out infinite}
+.tq .step{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.tq .sn{font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--accent)}
+.tq .st{font-size:13.5px;font-weight:500}
+.tq .keys{display:flex;gap:3px}
+.tq .crop{position:absolute;width:10px;height:10px;border-color:var(--accent);border-style:solid;border-width:0}
+.tq .try{flex:none;padding:0;border:0;background:transparent;color:var(--accent);font-family:'Martian Mono',monospace;font-size:10px;text-decoration:underline;text-underline-offset:4px}
+@media (prefers-reduced-motion: reduce){.tq *{animation:none !important}}
+</style>
+<style>
+html{--accent-t:#FFB547;--page:#0B0A08}
+html[data-theme=light]{--accent-t:#985400;--page:#E4DED2}
+html[data-theme=light] .tr,html[data-theme=light] .tq{--bg:#F5F1E8;--panel:#ECE6D9;--raise:#E3DCCB;--line:#D3CABA;--text:#1C1813;--muted:#4F483D;--faint:#6E6556;--ink:#FFF9EF;--bad:#B4321F}
+html[data-theme=light] .tr .scrim,html[data-theme=light] .tq .scrim{background:rgba(40,32,20,.42)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--page) !important;padding:48px 24px;box-sizing:border-box}
+.ct-theme{position:fixed;top:14px;right:14px;font:500 11px 'Martian Mono',ui-monospace,monospace;padding:7px 11px;border-radius:3px;border:1px solid rgba(128,120,100,.45);background:transparent;color:#8C8474;cursor:pointer}
+</style>
+</head>
+<body>
+<button class="ct-theme" type="button" onclick="ctToggle()">light / dark</button>
+<div class="tq" style="--accent: var(--accent-t); width: 380px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<header style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line)">
+<span aria-hidden="true" style="font-weight: 800; font-size: 17px; letter-spacing: -0.03em; color: var(--accent)">ct</span>
+<label for="ehc-search" class="sr">Search clips</label>
+<input id="ehc-search" type="search" placeholder="Search the trace…" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 15px; color: var(--text); outline: none">
+<a class="ico" href="empty.html" aria-label="Expand to history and preview" title="Expand (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></a>
+</header>
+
+<div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 44px 22px minmax(0, 1fr)">
+<div class="m" style="padding-top: 24px; text-align: right; font-size: 9.5px; color: var(--accent)">now</div>
+<div class="spine" aria-hidden="true"><span class="top"></span><span class="dash"></span><span class="node"></span></div>
+<div style="padding: 18px 18px 18px 12px; display: flex; flex-direction: column; gap: 20px; min-width: 0">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-size: 27px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.05">Nothing on<br>the trace yet.</h1>
+<span style="font-size: 13px; line-height: 1.45; color: var(--muted)">Copy something and it shows up here, newest on top.</span>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line)">
+<li class="step"><span class="sn">01</span><span class="st">Copy anything</span><span class="keys"><span class="key">Ctrl</span><span class="key">C</span></span></li>
+<li class="step"><span class="sn">02</span><span class="st">Open Cliptrace</span><span class="keys"><span class="key">Win</span><span class="key">⇧</span><span class="key">V</span></span></li>
+<li class="step"><span class="sn">03</span><span class="st">Paste it back</span><span class="keys"><span class="key">↵</span></span></li>
+</ol>
+<div style="position: relative; margin-top: auto; padding: 14px 14px; background: var(--panel); display: flex; flex-direction: column; gap: 10px">
+<span class="crop" aria-hidden="true" style="top: -4px; left: -4px; border-top-width: 1.5px; border-left-width: 1.5px"></span>
+<span class="crop" aria-hidden="true" style="top: -4px; right: -4px; border-top-width: 1.5px; border-right-width: 1.5px"></span>
+<span class="crop" aria-hidden="true" style="bottom: -4px; left: -4px; border-bottom-width: 1.5px; border-left-width: 1.5px"></span>
+<span class="crop" aria-hidden="true" style="bottom: -4px; right: -4px; border-bottom-width: 1.5px; border-right-width: 1.5px"></span>
+<span style="font-size: 14.5px; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em">Cliptrace remembers what you copy, so you don’t have to.</span>
+<span style="display: flex; align-items: center; justify-content: space-between"><span class="m" style="font-size: 9px; color: var(--faint)">try it</span><button type="button" class="try">copy this line</button></span>
+</div>
+</div>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 46px; padding: 0 16px; border-top: 1px solid var(--line)">
+<span class="hint"><span class="key">Esc</span>Close</span>
+<span style="flex: 1"></span>
+<span class="hint"><span class="key">Tab</span>Expand</span>
+</footer>
+</div>
+</body>
+</html>

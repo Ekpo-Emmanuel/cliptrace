@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { IconClose, IconSparkles } from "../icons";
+import { IconClose, IconCollapse, IconExpand, IconSettings } from "../icons";
 
 type Props = {
   value: string;
@@ -9,8 +9,13 @@ type Props = {
   suggestIndex: number;
   onPickSuggest: (name: string) => void;
   trailing?: ReactNode;
+  paused?: boolean;
+  compact?: boolean;
+  onToggleMode?: () => void;
+  onSettings?: () => void;
 };
 
+/** Header: wordmark, divider, borderless search, segmented toggle, mode button. */
 export function SearchBar({
   value,
   onChange,
@@ -19,18 +24,46 @@ export function SearchBar({
   suggestIndex,
   onPickSuggest,
   trailing,
+  paused = false,
+  compact = false,
+  onToggleMode,
+  onSettings,
 }: Props) {
+  const prefix = value.match(/(?:^|\s)#([^\s]*)$/)?.[1] ?? "";
   return (
-    <div className="relative">
-      <div className="flex items-center gap-2 rounded-md bg-surface-container-low px-space-sm py-1">
-        <IconSparkles className="h-4 w-4 shrink-0 text-primary" />
+    <div className="relative border-b border-[var(--line)]">
+      <div
+        className={`flex items-center px-4 ${
+          compact ? "h-[52px] gap-3" : "h-[58px] gap-4"
+        }`}
+      >
+        <span className={`wordmark ${paused ? "paused" : ""}`}>
+          {compact ? (
+            <>
+              c<b>t</b>
+            </>
+          ) : (
+            <>
+              clip<b>trace</b>
+            </>
+          )}
+        </span>
+        {compact ? null : (
+          <span
+            className="h-5 w-px shrink-0"
+            style={{ background: "var(--line)" }}
+          />
+        )}
         <label className="sr-only" htmlFor="q">
           Search clips
         </label>
         <input
           id="q"
-          className="font-body-md min-w-0 flex-1 border-0 bg-transparent text-on-surface outline-none ring-0 focus:outline-none focus-visible:outline-none placeholder:text-outline placeholder:opacity-50 placeholder:text-xs"
-          placeholder="Search clips, #tags, or time…"
+          className="min-w-0 flex-1 border-0 bg-transparent text-[16px] tracking-[-0.01em] outline-none ring-0 focus:outline-none focus-visible:outline-none placeholder:text-(--faint)"
+          style={{ color: "var(--text)" }}
+          placeholder={
+            compact ? "Search…" : "Search the trace…  #tag, last week"
+          }
           value={value}
           autoComplete="off"
           spellCheck={false}
@@ -43,37 +76,72 @@ export function SearchBar({
         {value ? (
           <button
             type="button"
-            className="rounded-full p-0.5 text-on-surface-variant hover:bg-surface-container-high"
+            className="btn-ico !h-6 !w-6"
             aria-label="Clear search"
             onClick={onClear}
           >
             <IconClose className="h-3.5 w-3.5" />
           </button>
         ) : null}
-        {trailing}
+        {compact ? null : trailing}
+        <button
+          type="button"
+          className="btn-ico shrink-0"
+          aria-label="Settings"
+          title="Settings  Ctrl ,"
+          onClick={onSettings}
+        >
+          <IconSettings className="h-[17px] w-[17px]" />
+        </button>
+        <button
+          type="button"
+          className="btn-ico shrink-0"
+          aria-label={
+            compact ? "Expand to full view" : "Collapse to quick paste"
+          }
+          title={compact ? "Expand (Tab)" : "Quick paste (Tab)"}
+          onClick={onToggleMode}
+        >
+          {compact ? (
+            <IconExpand className="h-[17px] w-[17px]" />
+          ) : (
+            <IconCollapse className="h-[17px] w-[17px]" />
+          )}
+        </button>
       </div>
       {suggest.length > 0 ? (
         <ul
           id="suggest"
           role="listbox"
-          className="shadow-preview absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-outline-variant/40 bg-surface-container-lowest"
+          className={`absolute left-4 right-4 z-20 overflow-hidden rounded-(--r-md) border-t-2 ${
+            compact ? "top-[52px]" : "top-[58px]"
+          }`}
+          style={{
+            background: "var(--panel)",
+            borderColor: "var(--accent)",
+            boxShadow: "var(--shadow-pop)",
+          }}
         >
           {suggest.map((name, i) => (
             <li
               key={name}
               role="option"
               aria-selected={i === suggestIndex}
-              className={`font-body-sm cursor-pointer px-space-sm py-space-xs ${
-                i === suggestIndex
-                  ? "bg-secondary-container text-on-secondary-container"
-                  : ""
-              }`}
+              className="flex h-9 cursor-pointer items-center px-3 font-mono text-[12px]"
+              style={{
+                background: i === suggestIndex ? "var(--raise)" : undefined,
+                color: "var(--muted)",
+              }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 onPickSuggest(name);
               }}
             >
-              #{name}
+              #
+              <span style={{ color: "var(--accent)" }}>
+                {name.slice(0, prefix.length)}
+              </span>
+              {name.slice(prefix.length)}
             </li>
           ))}
         </ul>

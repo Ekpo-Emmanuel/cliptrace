@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { ClipCard, TagCount } from "../api";
-import { IconClose, IconPlus } from "../icons";
 
 type Props = {
   card: ClipCard;
@@ -29,27 +28,27 @@ export function TagEditor({ card, allTags, onAdd, onRemove }: Props) {
     setOpen(false);
   }
 
-  const kbd =
-    "font-label-sm kbd-bevel inline-flex items-center gap-1 rounded-sm  bg-secondary-container px-1.5 py-0.5 text-on-surface cursor-pointer";
-
   return (
-    <div className="font-label-sm flex flex-wrap items-center gap-1 text-on-surface-variant">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       {card.tags.map((name) => (
         <button
           key={name}
           type="button"
-          className={kbd}
+          className="tagchip"
           aria-label={`Remove tag ${name}`}
           onClick={() => onRemove(name)}
         >
-          {name}
-          <IconClose className="h-3 w-3" />
+          #{name}
+          <span style={{ color: "var(--faint)" }}>×</span>
         </button>
       ))}
       <input
         id="add-tag"
-        className={`${kbd} w-24 border-0 outline-none ${open ? "" : "sr-only"}`}
-        placeholder="Name"
+        className={`w-24 border-0 border-b bg-transparent font-mono text-[10.5px] outline-none ${
+          open ? "" : "sr-only"
+        }`}
+        style={{ borderColor: "var(--accent)", color: "var(--text)" }}
+        placeholder="name"
         aria-label="Add tag"
         autoComplete="off"
         maxLength={32}
@@ -76,11 +75,10 @@ export function TagEditor({ card, allTags, onAdd, onRemove }: Props) {
       {open || full ? null : (
         <button
           type="button"
-          className={`${kbd} text-on-surface-variant`}
+          className="txt-link"
           onClick={() => document.getElementById("add-tag")?.focus()}
         >
-          <IconPlus className="h-3 w-3" />
-          Tag
+          + tag
         </button>
       )}
       <datalist id="tag-suggest">
