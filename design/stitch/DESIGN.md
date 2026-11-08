@@ -160,6 +160,8 @@ Cliptrace functions as a non-intrusive desktop floating palette (default dimensi
 1. **Omni-Input Bar**: Persistent top anchor containing search tokens, source app filters, and status pins.
 2. **Dynamic Scroller Feed**: Single-column indexed virtual list with tight `0.5rem` (`space-sm`) gaps between list items for seamless keyboard arrow navigation.
 3. **Inspector Footer**: Compact `0.75rem` (`space-md`) metadata strip indicating keyboard bindings (`↵ Copy`, `⌘⇧P Pin`, `⌥⌫ Delete`).
+4. **Move handle**: 12px top strip with a 32×2px `outline-variant` pill. Drag via `startDragging`. No extra chrome.
+5. **Undo / error bars**: Same density as the multi-select PickBar (`surface-container-low`, `font-label-xs`, primary Undo). Errors use `error-container`. No inverse snackbar.
 
 Compact margins and internal paddings prioritize maximum content density without sacrificing click or tap targets. Content adapts automatically when snapped or resized against Windows desktop boundaries.
 

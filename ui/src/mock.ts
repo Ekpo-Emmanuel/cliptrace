@@ -331,6 +331,7 @@ export function createMockApi(): CliptraceApi {
       void _id;
     },
     async hidePopup() {},
+    async startDrag() {},
     async stageDelete(_id) {
       void _id;
     },
