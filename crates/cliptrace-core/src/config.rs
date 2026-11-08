@@ -24,6 +24,9 @@ pub struct Config {
     pub secret_ttl_hours: u32,
     #[serde(default = "default_retention_days")]
     pub retention_days: u32,
+    /// Empty or omitted: `<data dir>\\runtime\\onnxruntime.dll`.
+    #[serde(default)]
+    pub onnxruntime_path: String,
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -40,6 +43,18 @@ impl Default for Config {
             blocklist: Vec::new(),
             secret_ttl_hours: default_secret_ttl_hours(),
             retention_days: default_retention_days(),
+            onnxruntime_path: String::new(),
+        }
+    }
+}
+
+impl Config {
+    pub fn resolved_onnxruntime_path(&self, paths: &Paths) -> PathBuf {
+        let trimmed = self.onnxruntime_path.trim();
+        if trimmed.is_empty() {
+            paths.onnxruntime_dll()
+        } else {
+            PathBuf::from(trimmed)
         }
     }
 }
@@ -69,9 +84,14 @@ impl Paths {
         }
     }
 
+    pub fn onnxruntime_dll(&self) -> PathBuf {
+        self.data_dir.join("runtime").join("onnxruntime.dll")
+    }
+
     pub fn ensure_data_dir(&self) -> Result<(), ConfigError> {
         fs::create_dir_all(&self.data_dir)?;
         fs::create_dir_all(&self.models_dir)?;
+        fs::create_dir_all(self.data_dir.join("runtime"))?;
         Ok(())
     }
 }
@@ -87,15 +107,16 @@ pub fn data_dir() -> Result<PathBuf, ConfigError> {
     Ok(local.join("Cliptrace"))
 }
 
-pub fn load_or_create(config_path: &Path) -> Result<Config, ConfigError> {
-    if config_path.exists() {
-        let raw = fs::read_to_string(config_path)?;
+pub fn load_or_create(paths: &Paths) -> Result<Config, ConfigError> {
+    if paths.config_path.exists() {
+        let raw = fs::read_to_string(&paths.config_path)?;
         return Ok(toml::from_str(&raw)?);
     }
-    let config = Config::default();
-    if let Some(parent) = config_path.parent() {
+    let mut config = Config::default();
+    config.onnxruntime_path = paths.onnxruntime_dll().to_string_lossy().into_owned();
+    if let Some(parent) = paths.config_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(config_path, toml::to_string_pretty(&config)?)?;
+    fs::write(&paths.config_path, toml::to_string_pretty(&config)?)?;
     Ok(config)
 }

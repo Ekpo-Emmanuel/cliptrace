@@ -2,7 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 #[cfg(feature = "embeddings")]
-use cliptrace_core::{EmbedWorker, Embedder, run_embed_test};
+use cliptrace_core::{
+    EmbedWorker, Embedder, backfill_batch_size, backfill_sleep, run_embed_test, warn_once,
+};
 use cliptrace_core::{
     CaptureConfig, NewClip, Paths, Store, UpsertOutcome, load_or_create, relative_time,
     run_listener, set_clipboard_text,
@@ -49,17 +51,29 @@ fn embed_test_cmd(text: &str) -> Result<()> {
     #[cfg(feature = "embeddings")]
     {
         let paths = open_paths()?;
+        let config = load_or_create(&paths).context("load config.toml")?;
+        let dll = config.resolved_onnxruntime_path(&paths);
         eprintln!(
-            "embed-test: cache={} text_len={}",
+            "embed-test: cache={} dll={} text_len={}",
             paths.models_dir.display(),
+            dll.display(),
             text.len()
         );
-        let reports = run_embed_test(&paths.models_dir, text).context("onnx/fastembed embed-test")?;
-        for r in reports {
-            println!(
-                "{}\tdims={}\tload_ms={}\tembed_ms={}\tfirst3={:.6} {:.6} {:.6}",
-                r.model, r.dims, r.load_ms, r.embed_ms, r.first3[0], r.first3[1], r.first3[2]
-            );
+        match run_embed_test(&paths.models_dir, &dll, text) {
+            Ok(r) => {
+                println!(
+                    "{}\tdims={}\tload_ms={}\tembed1_ms={}\tembed2_ms={}\tfirst3={:.6} {:.6} {:.6}",
+                    r.model,
+                    r.dims,
+                    r.load_ms,
+                    r.embed1_ms,
+                    r.embed2_ms,
+                    r.first3[0],
+                    r.first3[1],
+                    r.first3[2]
+                );
+            }
+            Err(err) => warn_once(&err.to_string()),
         }
         Ok(())
     }
@@ -72,11 +86,20 @@ fn embed_test_cmd(text: &str) -> Result<()> {
 
 fn watch() -> Result<()> {
     let paths = open_paths()?;
-    let config = load_or_create(&paths.config_path).context("load config.toml")?;
+    let config = load_or_create(&paths).context("load config.toml")?;
     let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
     #[cfg(feature = "embeddings")]
-    let worker = EmbedWorker::spawn(paths.models_dir.clone(), paths.db_path.clone())
-        .context("start embedding worker")?;
+    let worker = {
+        let dll = config.resolved_onnxruntime_path(&paths);
+        if !dll.is_file() {
+            warn_once(&format!("onnxruntime.dll missing at {}", dll.display()));
+        }
+        EmbedWorker::spawn(
+            paths.models_dir.clone(),
+            paths.db_path.clone(),
+            dll,
+        )
+    };
 
     eprintln!(
         "cliptrace watch: storing clips in {} (Ctrl+C to stop)",
@@ -108,9 +131,8 @@ fn watch() -> Result<()> {
                         preview(&event.text)
                     );
                     #[cfg(feature = "embeddings")]
-                    match store.clip_search_text(id) {
-                        Ok(search_text) => worker.submit(id, search_text),
-                        Err(err) => eprintln!("embed skip id={id}: {err}"),
+                    if let Ok(search_text) = store.clip_search_text(id) {
+                        worker.submit(id, search_text);
                     }
                 }
                 Ok(UpsertOutcome::Duplicate { id, copy_count }) => {
@@ -123,6 +145,12 @@ fn watch() -> Result<()> {
                         preview(&event.text),
                         copy_count
                     );
+                    #[cfg(feature = "embeddings")]
+                    if store.has_embedding(id).ok() == Some(false) {
+                        if let Ok(search_text) = store.clip_search_text(id) {
+                            worker.submit(id, search_text);
+                        }
+                    }
                 }
                 Err(err) => {
                     eprintln!(
@@ -150,9 +178,23 @@ fn vsearch_cmd(args: &[String]) -> Result<()> {
     {
         let (query, limit) = parse_search_args(args, "vsearch")?;
         let paths = open_paths()?;
+        let config = load_or_create(&paths).context("load config.toml")?;
         let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
-        let mut embedder = Embedder::load(&paths.models_dir).context("load embedding model")?;
-        let vector = embedder.embed_one(&query).context("embed query")?;
+        let dll = config.resolved_onnxruntime_path(&paths);
+        let mut embedder = match Embedder::load(&paths.models_dir, &dll) {
+            Ok(e) => e,
+            Err(err) => {
+                warn_once(&err.to_string());
+                return Ok(());
+            }
+        };
+        let vector = match embedder.embed_one(&query) {
+            Ok(v) => v,
+            Err(err) => {
+                warn_once(&err.to_string());
+                return Ok(());
+            }
+        };
         print_hits(store.search_vector(&vector, limit).context("vector search")?)
     }
     #[cfg(not(feature = "embeddings"))]
@@ -166,6 +208,7 @@ fn backfill_cmd() -> Result<()> {
     #[cfg(feature = "embeddings")]
     {
         let paths = open_paths()?;
+        let config = load_or_create(&paths).context("load config.toml")?;
         let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
         let missing = store
             .clips_missing_embeddings()
@@ -176,20 +219,38 @@ fn backfill_cmd() -> Result<()> {
             return Ok(());
         }
         eprintln!("backfill: {total} missing vectors");
-        let mut embedder = Embedder::load(&paths.models_dir).context("load embedding model")?;
+        let dll = config.resolved_onnxruntime_path(&paths);
+        let mut embedder = match Embedder::load(&paths.models_dir, &dll) {
+            Ok(e) => e,
+            Err(err) => {
+                warn_once(&err.to_string());
+                eprintln!("backfill remaining={total}");
+                return Ok(());
+            }
+        };
         let mut done = 0usize;
-        for (id, search_text) in missing {
+        let batch = backfill_batch_size();
+        for (i, (id, search_text)) in missing.into_iter().enumerate() {
             let text_len = search_text.len();
-            let vector = embedder
-                .embed_one(&search_text)
-                .with_context(|| format!("embed id={id} text_len={text_len}"))?;
-            store
-                .upsert_embedding(id, &vector)
-                .with_context(|| format!("store vector id={id}"))?;
-            done += 1;
-            eprintln!("backfill {done}/{total} id={id} dims=384 text_len={text_len}");
+            match embedder.embed_one(&search_text) {
+                Ok(vector) => {
+                    if let Err(err) = store.upsert_embedding(id, &vector) {
+                        eprintln!("backfill store fail id={id} text_len={text_len}: {err}");
+                    } else {
+                        done += 1;
+                    }
+                }
+                Err(err) => {
+                    eprintln!("backfill fail id={id} text_len={text_len}: {err}");
+                }
+            }
+            eprintln!("backfill {}/{total} id={id} dims=384 text_len={text_len}", i + 1);
+            if (i + 1) % batch == 0 {
+                std::thread::sleep(backfill_sleep());
+            }
         }
-        eprintln!("backfill done embedded={done}");
+        let remaining = store.clips_missing_embeddings()?.len();
+        eprintln!("backfill done embedded={done} remaining={remaining}");
         Ok(())
     }
     #[cfg(not(feature = "embeddings"))]

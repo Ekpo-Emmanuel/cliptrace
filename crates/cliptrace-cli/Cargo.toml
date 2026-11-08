@@ -8,7 +8,7 @@ name = "cliptrace"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["embeddings"]
 embeddings = ["cliptrace-core/embeddings"]
 
 [dependencies]

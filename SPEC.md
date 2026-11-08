@@ -22,7 +22,7 @@ Every copy is stored and indexed on-device, so you can type
 | Workspace | `cliptrace-core` (lib), `cliptrace-cli` (bin), `src-tauri` (M7 only) |
 | Win32 | `windows` crate |
 | DB | SQLite via `rusqlite` (bundled) + FTS5; embeddings in `clip_embeddings` BLOB |
-| Embeddings | `fastembed` with `bge-small-en-v1.5` (384 dims) |
+| Embeddings | `fastembed` `bge-small-en-v1.5` (384), ONNX Runtime loaded dynamically (`onnxruntime.dll`) |
 | Time parsing | `chrono` + small custom parser in `timeparse.rs` |
 | Secret storage | DPAPI (`CryptProtectData`) per-value encryption |
 | Config | `toml` + `serde`, paths via `dirs` |
@@ -37,8 +37,9 @@ Root: `%LOCALAPPDATA%\Cliptrace\` (override with env var `CLIPTRACE_DATA_DIR` fo
 ```
 %LOCALAPPDATA%\Cliptrace\
   cliptrace.db      # SQLite database
-  config.toml       # blocklist, retention, hotkey
-  models\           # cached embedding model files
+  config.toml       # blocklist, retention, hotkey, onnxruntime_path
+  models\           # cached embedding model files (offline after first download)
+  runtime\          # official onnxruntime.dll (CPU build)
   logs\             # rolling logs (never log clip content)
 ```
 
@@ -91,11 +92,20 @@ CREATE TABLE clip_embeddings (
 - Purge job: delete rows where `expires_at < now` (default secret TTL 24h).
 
 ### embed (M4)
-- `fastembed` bge-small, model cached in `models\`.
-- Embed on a background worker so capture never blocks.
+- `fastembed` full `BGESmallENV15` (`bge-small-en-v1.5`), 384 dims, ONNX intra-op threads = 2.
+- Load ONNX Runtime dynamically from `config.toml` `onnxruntime_path` (default
+  `%LOCALAPPDATA%\Cliptrace\runtime\onnxruntime.dll`). Set `ORT_DYLIB_PATH` and
+  prepend that folder to `PATH` before the first model load.
+- Cached model files in `models\`. If an `.onnx` file is already there, set
+  `HF_HUB_OFFLINE=1` so load makes no network calls.
+- Embed on a background worker: load lazily on the first clip, never block capture.
+- If the DLL is missing or ONNX fails: one warning; `watch` still stores clips;
+  `search` still works.
 - Store L2-normalized 384-d vectors in `clip_embeddings` (no sqlite-vec).
-- Vector search is brute-force cosine (dot product of L2-normalized vectors).
-- `cliptrace backfill` embeds any clip missing a vector.
+- Vector search (`vsearch`) is brute-force cosine (dot product of L2-normalized vectors).
+- `cliptrace backfill` embeds clips missing a vector in small batches with a short sleep.
+- CLI crate enables the `embeddings` feature by default; `cliptrace-core` keeps it off
+  so unit tests do not link ONNX.
 
 ### search (M3, M5)
 1. `timeparse` extracts a time range from the query ("tuesday", "yesterday",
@@ -111,7 +121,8 @@ CREATE TABLE clip_embeddings (
   PEM headers) + high-entropy token heuristic (length >= 20, Shannon entropy threshold).
 - On detection: `is_secret = 1`, encrypt value with DPAPI, build context-only
   `search_text`, set `expires_at`.
-- Config: `blocklist` (exe names), `secret_ttl_hours`, `retention_days` (default 90 for normal clips).
+- Config: `blocklist` (exe names), `secret_ttl_hours`, `retention_days` (default 90 for normal clips),
+  `onnxruntime_path` (default `<data dir>\\runtime\\onnxruntime.dll`).
 
 ## Milestones and acceptance criteria
 Work one milestone at a time. Commit after each one passes.
@@ -121,7 +132,7 @@ Work one milestone at a time. Commit after each one passes.
 | M1 | Capture listener | `cliptrace watch` prints timestamp, exe, window title, and first 60 chars for every copy; password-manager copy prints nothing |
 | M2 | SQLite storage | Clips persist across restarts; duplicate copy bumps `copy_count`; blocklisted app is skipped |
 | M3 | CLI keyword search | `cliptrace search "stripe"` returns ranked results via FTS5 with preview and time |
-| M4 | Embeddings | New clips get vectors without blocking capture; `backfill` works |
+| M4 | Embeddings | New clips get vectors without blocking capture; `backfill` and `vsearch` work; capture/search survive a missing ONNX DLL |
 | M5 | Hybrid + time | `cliptrace search "stripe key from tuesday"` returns the right clip in the top 5 |
 | M6 | Secrets | Fake `sk_live_...` copy is stored encrypted, not findable by its characters, findable by "stripe key", purged after TTL |
 | M7 | Popup UI | Win+Shift+V opens a search box, Enter copies the result back and closes |

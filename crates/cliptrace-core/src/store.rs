@@ -201,6 +201,18 @@ impl Store {
             .map_err(|_| StoreError::NotFound(id))
     }
 
+    pub fn has_embedding(&self, id: i64) -> Result<bool, StoreError> {
+        let found: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM clip_embeddings WHERE clip_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
+    }
+
     pub fn clips_missing_embeddings(&self) -> Result<Vec<(i64, String)>, StoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT c.id, c.search_text
