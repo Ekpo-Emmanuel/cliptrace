@@ -78,7 +78,6 @@ export function ClipList({
             {compact ? (
               <CompactRow
                 card={row.card}
-                number={row.index + 1}
                 selected={row.index === selected}
                 past={row.index < selected}
                 picked={pickIds.includes(row.card.id)}

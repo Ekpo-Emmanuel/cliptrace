@@ -65,7 +65,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(loadTheme);
   useEffect(() => applyTheme(theme), [theme]);
   const shownTheme = useEffectiveTheme(theme);
-  // Quick paste lists pinned clips first; selection and Alt 1-9 follow this order.
+  // Quick paste lists pinned clips first; selection follows this order.
   const cards = useMemo(
     () =>
       compact
@@ -421,7 +421,7 @@ export default function App() {
     }
     setSelected(next);
     selectedId.current = cards[next]?.id ?? null;
-    if (next > cards.length - 8) void load(false);
+    if (!done && next > cards.length - 8) void load(false);
   }
 
   function askDelete() {
@@ -513,14 +513,6 @@ export default function App() {
       if (e.key === "Tab" && !tagFocus && suggest.length === 0) {
         e.preventDefault();
         toggleMode();
-        return;
-      }
-      if (compact && e.altKey && /^[1-9]$/.test(e.key)) {
-        const card = cards[Number(e.key) - 1];
-        if (card) {
-          e.preventDefault();
-          void copy(card.id, true);
-        }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "1") {
@@ -629,14 +621,10 @@ export default function App() {
       if (document.activeElement?.id !== "q") return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelected((i) => {
-          const n = Math.min(cards.length - 1, i + 1);
-          if (n > cards.length - 8) void load(false);
-          return Math.max(0, n);
-        });
+        moveSelection(selected + 1);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelected((i) => Math.max(0, i - 1));
+        moveSelection(selected - 1);
       } else if (e.key === "Enter") {
         e.preventDefault();
         void copy(undefined, true);

@@ -127,7 +127,6 @@ const SHORTCUTS: { title: string; rows: [string[], string][] }[] = [
       [["↑", "↓"], "Previous / next clip"],
       [["pgup", "pgdn"], "Jump six clips"],
       [["home", "end"], "First / last (empty search)"],
-      [["alt", "1–9"], "Paste clip by number (quick paste)"],
       [["ctrl", "1 / 2"], "All / pinned"],
       [["ctrl", "k"], "Focus search"],
     ],

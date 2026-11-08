@@ -32,7 +32,6 @@ export function KeyHints({
       {compact ? (
         <>
           <Item k="↵" v="paste" />
-          <Item k="alt 1–9" v="pick" />
           <Item k="esc" v="close" />
         </>
       ) : empty ? (
