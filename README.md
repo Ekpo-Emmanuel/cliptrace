@@ -145,6 +145,10 @@ Run it with no arguments to see all commands, including `pin`, `tag`, `copy`, `p
 - `design/v2/`: the design reference and screens.
 - `SPEC.md`: architecture, schema and milestones.
 
+## License
+
+Cliptrace is released under the [MIT License](LICENSE).
+
 ## Third-party software
 
 Cliptrace uses [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT license) and the `bge-small-en-v1.5` embedding model through `fastembed`. The release zip includes the ONNX Runtime license.
