@@ -7,3 +7,11 @@
 .env
 node_modules
 dist
+/ui/node_modules
+/ui/dist
+# Local editor rules
+.cursor/
+
+# Local scratch logs
+release-build.log
+tauri-run.log

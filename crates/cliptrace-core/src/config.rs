@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,12 +24,15 @@ pub struct Config {
     pub secret_ttl_hours: u32,
     #[serde(default = "default_retention_days")]
     pub retention_days: u32,
-    /// Empty or omitted: `<data dir>\\runtime\\onnxruntime.dll`.
+    /// Empty or omitted: next to the exe, then `<data dir>\\runtime\\onnxruntime.dll`.
     #[serde(default)]
     pub onnxruntime_path: String,
     /// Global popup hotkey, e.g. `Ctrl+Alt+V`.
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    /// Launch at Windows sign-in (HKCU Run). Mirrors the registry value we set.
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -52,18 +55,31 @@ impl Default for Config {
             retention_days: default_retention_days(),
             onnxruntime_path: String::new(),
             hotkey: default_hotkey(),
+            autostart: false,
         }
     }
 }
 
 impl Config {
+    /// Where to load `onnxruntime.dll` from: the configured path if that file exists, then
+    /// next to the exe (how a download ships it), then `<data dir>\runtime`.
     pub fn resolved_onnxruntime_path(&self, paths: &Paths) -> PathBuf {
         let trimmed = self.onnxruntime_path.trim();
-        if trimmed.is_empty() {
-            paths.onnxruntime_dll()
-        } else {
-            PathBuf::from(trimmed)
+        if !trimmed.is_empty() {
+            let configured = PathBuf::from(trimmed);
+            if configured.exists() {
+                return configured;
+            }
         }
+        if let Some(beside_exe) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|dir| dir.join("onnxruntime.dll")))
+        {
+            if beside_exe.exists() {
+                return beside_exe;
+            }
+        }
+        paths.onnxruntime_dll()
     }
 }
 
@@ -120,8 +136,7 @@ pub fn load_or_create(paths: &Paths) -> Result<Config, ConfigError> {
         let raw = fs::read_to_string(&paths.config_path)?;
         return Ok(toml::from_str(&raw)?);
     }
-    let mut config = Config::default();
-    config.onnxruntime_path = paths.onnxruntime_dll().to_string_lossy().into_owned();
+    let config = Config::default();
     if let Some(parent) = paths.config_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -132,4 +147,38 @@ pub fn load_or_create(paths: &Paths) -> Result<Config, ConfigError> {
 pub fn save(paths: &Paths, config: &Config) -> Result<(), ConfigError> {
     fs::write(&paths.config_path, toml::to_string_pretty(config)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn paths_in(name: &str) -> Paths {
+        let dir = std::env::temp_dir().join(format!("cliptrace-cfg-{name}-{}", std::process::id()));
+        Paths::from_data_dir(dir)
+    }
+
+    #[test]
+    fn onnxruntime_uses_configured_path_when_the_file_exists() {
+        let paths = paths_in("configured");
+        fs::create_dir_all(&paths.data_dir).unwrap();
+        let dll = paths.data_dir.join("custom.dll");
+        fs::write(&dll, b"x").unwrap();
+        let config = Config {
+            onnxruntime_path: dll.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        assert_eq!(config.resolved_onnxruntime_path(&paths), dll);
+        let _ = fs::remove_dir_all(&paths.data_dir);
+    }
+
+    #[test]
+    fn onnxruntime_falls_back_to_the_data_dir_when_nothing_else_exists() {
+        let paths = paths_in("fallback");
+        let config = Config {
+            onnxruntime_path: r"C:\does\not\exist\onnxruntime.dll".into(),
+            ..Config::default()
+        };
+        assert_eq!(config.resolved_onnxruntime_path(&paths), paths.onnxruntime_dll());
+    }
 }

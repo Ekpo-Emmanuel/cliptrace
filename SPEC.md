@@ -26,7 +26,7 @@ Every copy is stored and indexed on-device, so you can type
 | Time parsing | `chrono` + small custom parser in `timeparse.rs` |
 | Secret storage | DPAPI (`CryptProtectData`) per-value encryption |
 | Config | `toml` + `serde`, paths via `dirs` |
-| UI (last) | Tauri v2, plain TS or Svelte |
+| frontend | React + TS + Tailwind (Vite) |
 
 Fallback: if `ort`/ONNX loading blocks progress for more than ~90 minutes,
 stop and propose a switch to C#/.NET 8. Architecture is identical.
@@ -133,14 +133,17 @@ CREATE TABLE clip_embeddings (
 
 ### popup (M7, M8b)
 - One process: tray + clipboard listener + embed worker + hourly purge.
-- Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar.
+- Named mutex single instance. Borderless always-on-top popup, centered. Two modes: Full view 880×580 and Quick paste (compact) 380×580. The window resizes between modes; Quick paste screens are `design/v2/screens/*-compact.html`. Quick paste has no Pinned tab, skip taskbar. Click outside (window blur) hides it and flushes pending deletes. Hide only after the popup has been focused once, and ignore blur for ~800ms after show so Ctrl+Alt+V key-up does not hide it. A thin top grab strip calls `startDragging` (after `begin_move` so blur-hide does not fire mid-drag).
 - Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
-- System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
+- frontend: React + TS + Tailwind (Vite). Fonts (Bricolage Grotesque, Martian Mono) are bundled locally in `ui/src/assets/fonts/` and loaded with `@font-face`; no Google Fonts or other network assets. Dark and light themes both ship, following `prefers-color-scheme`. Visual source of truth is `design/v2/DESIGN.md`; reference screens are `design/v2/screens/*.html`. Secrets are never revealed in the UI: ignore the design's "hold to reveal". Image clips are out of scope for v1: skip `image-item.html`. Accent is `--accent`.
 - Opens on Recent with the first row selected and the search box focused. Empty search browses; typing ranks.
 - Tabs: Recent, Pinned (count), Tags. Search stays inside the current tab. `#` offers tag autocomplete.
-- List plus preview. Secrets stay masked. Enter copies the real value, toasts “Copied”, then hides.
-- Pin, tag, mark-secret (one-way confirm), delete (5-second undo). Recent rows cached in process for a fast first paint.
-- Capture paused shows in the popup when the tray pause item is on.
+- List plus preview. Secrets stay masked. Enter copies the real value via `copy_clip` (decrypt in Rust, write clipboard, skip next capture so no duplicate row), toasts “Copied”, then hides.
+- Pin, tag, mark-secret (one-way confirm), delete (5-second undo). Optimistic UI; revert with a toast on error. Pending deletes flush on hide and on quit.
+- Recent page cached in the app process and pushed on open (`cliptraceOnOpen`) so the list paints in about 100ms, then refreshes. Capture while open emits `clips-changed`; keep selection by id.
+- Search debounce 150ms; ignore out-of-order responses. Preview pane loads full non-secret text with `clip_text`; list payloads strip `body` and never send raw secrets over IPC (masked previews only).
+- `status()` and tray Pause emit `status-changed` with `{ paused, keyword_only }`. Capture paused and keyword-only (missing embeddings DLL) show in the popup.
+- Tauri commands: `browse_clips`, `list_recent`, `search_clips`, `list_tags`, `set_pinned`, `add_tag`, `remove_tag`, `mark_clip_secret`, `delete_clip`, `stage_delete`, `unstage_delete`, `clip_text`, `copy_clip`, `hide_popup`, `status`. Typed errors, no panics. Frontend `api.ts` is the only `invoke` caller; browser mock + `?state=` stay for Vite-only.
 - Never show raw secrets. `autostart` / `no-autostart` write HKCU Run.
 
 ### secrets (M6)
@@ -172,7 +175,7 @@ Work one milestone at a time. Commit after each one passes.
 | M6 | Secrets | Fake `sk_live_...` copy is stored encrypted, not findable by its characters, findable by "stripe key", purged after TTL |
 | M7 | Popup UI | Ctrl+Alt+V (configurable `hotkey`) opens a search box, Enter copies the result back and closes |
 | M8a | Pins/tags/delete data | pin survives purge; tag FTS + `#tag`; mark-secret/delete wipe plaintext from `.db`/`-wal`; CLI list/tags; no UI yet |
-| M8b | Popup redesign | Recent / Pinned / Tags, list plus preview, keyboard actions, light and dark, no raw secrets on screen |
+| M8b | Popup redesign | Recent / Pinned / Tags, list plus preview, keyboard actions, light and dark, no raw secrets on screen; React UI talks to Tauri commands (mock only in browser) |
 
 M1-M5 are the core product. If time runs short, cut from the bottom.
 

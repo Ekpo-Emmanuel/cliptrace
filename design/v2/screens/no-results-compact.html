@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliptrace — No results (quick paste)</title>
+<script>
+(function(){var d=document.documentElement,q=new URLSearchParams(location.search).get('theme'),t=q;
+try{t=t||localStorage.getItem('cliptrace-theme')}catch(e){}
+d.setAttribute('data-theme',t==='light'?'light':'dark');
+window.ctToggle=function(){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);try{localStorage.setItem('cliptrace-theme',n)}catch(e){}};})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,800&amp;family=Martian+Mono:wght@300;400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tq{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206}
+.tq,.tq button,.tq input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tq button{cursor:pointer}
+.tq .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tq :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tq .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tq input::placeholder{color:var(--faint)}
+.tq .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:3px;color:var(--muted);text-decoration:none}
+.tq .ico:hover{background:var(--raise);color:var(--accent)}
+.tq .key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border:1px solid var(--line);border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;color:var(--faint)}
+.tq .hint{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.tq .sp{position:relative}
+.tq .sp .solid{position:absolute;left:50%;top:0;height:38px;width:1px;transform:translateX(-50%);background:var(--line)}
+.tq .sp .after{position:absolute;left:50%;top:66px;bottom:0;width:1px;transform:translateX(-50%);background:repeating-linear-gradient(to bottom,var(--line) 0 3px,transparent 3px 9px);-webkit-mask-image:linear-gradient(#000,transparent 55%);mask-image:linear-gradient(#000,transparent 55%)}
+.tq .cut{position:absolute;left:50%;top:52px;width:13px;height:13px;transform:translate(-50%,-50%);color:var(--accent)}
+.tq .tip{display:flex;flex-direction:column;gap:3px;padding:10px 0;border-bottom:1px solid var(--line)}
+.tq .tip code{font-family:'Martian Mono',monospace;font-size:11px;color:var(--accent)}
+.tq .tip span{font-size:13px;color:var(--muted)}
+</style>
+<style>
+html{--accent-t:#FFB547;--page:#0B0A08}
+html[data-theme=light]{--accent-t:#985400;--page:#E4DED2}
+html[data-theme=light] .tr,html[data-theme=light] .tq{--bg:#F5F1E8;--panel:#ECE6D9;--raise:#E3DCCB;--line:#D3CABA;--text:#1C1813;--muted:#4F483D;--faint:#6E6556;--ink:#FFF9EF;--bad:#B4321F}
+html[data-theme=light] .tr .scrim,html[data-theme=light] .tq .scrim{background:rgba(40,32,20,.42)}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--page) !important;padding:48px 24px;box-sizing:border-box}
+.ct-theme{position:fixed;top:14px;right:14px;font:500 11px 'Martian Mono',ui-monospace,monospace;padding:7px 11px;border-radius:3px;border:1px solid rgba(128,120,100,.45);background:transparent;color:#8C8474;cursor:pointer}
+</style>
+</head>
+<body>
+<button class="ct-theme" type="button" onclick="ctToggle()">light / dark</button>
+<div class="tq" style="--accent: var(--accent-t); width: 380px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<header style="display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--line)">
+<span aria-hidden="true" style="font-weight: 800; font-size: 17px; letter-spacing: -0.03em; color: var(--accent); margin-right: 4px">ct</span>
+<label for="nrc-search" class="sr">Search clips</label>
+<input id="nrc-search" type="search" placeholder="Search the trace…" value="invoice march" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 15px; color: var(--text); outline: none">
+<a class="ico" href="recent-compact.html" aria-label="Clear search" title="Clear search (Esc)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+<a class="ico" href="no-results.html" aria-label="Expand to history and preview" title="Expand (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></a>
+</header>
+
+<div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 44px 22px minmax(0, 1fr)">
+<span></span>
+<span class="sp" aria-hidden="true">
+<span class="solid"></span>
+<svg class="cut" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
+<span class="after"></span>
+</span>
+<div style="padding: 20px 18px 18px 12px; display: flex; flex-direction: column; gap: 22px; min-width: 0">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="m" style="font-size: 9.5px; color: var(--faint)">0 of 109 match</span>
+<h1 style="margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.08">No clips match<br><span style="color: var(--accent); overflow-wrap: anywhere">“invoice march”</span></h1>
+</div>
+<div style="border-top: 1px solid var(--line)">
+<div class="tip"><code>app:chrome</code><span>Only clips from that app</span></div>
+<div class="tip"><code>#meeting</code><span>Clips with that tag</span></div>
+<div class="tip"><code>fewer words</code><span>Every word has to match</span></div>
+</div>
+<span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--faint)"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Secrets are never searched.</span>
+</div>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 46px; padding: 0 16px; border-top: 1px solid var(--line)">
+<span class="hint"><span class="key">Esc</span>Clear search</span>
+<span style="flex: 1"></span>
+<span class="hint"><span class="key">Tab</span>Expand</span>
+</footer>
+</div>
+</body>
+</html>

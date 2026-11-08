@@ -19,3 +19,7 @@ windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[features]
+# Serve the bundled UI from ui/dist instead of the Vite dev URL. Release builds need this.
+custom-protocol = ["tauri/custom-protocol"]

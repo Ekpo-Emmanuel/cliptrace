@@ -144,6 +144,7 @@ fn watch() -> Result<()> {
     run_listener(
         CaptureConfig {
             blocklist: config.blocklist,
+            ..Default::default()
         },
         |event| {
             let now_ms = unix_ms();

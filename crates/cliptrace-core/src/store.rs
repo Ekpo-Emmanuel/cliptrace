@@ -69,6 +69,8 @@ pub enum StoreError {
     TooManyTags,
     #[error("clip {0} is already a secret")]
     AlreadySecret(i64),
+    #[error("clip {0} is a secret")]
+    IsSecret(i64),
 }
 
 #[derive(Clone, Debug)]
@@ -366,6 +368,11 @@ impl Store {
         Ok(cards)
     }
 
+    pub fn clip_count(&self) -> Result<i64, StoreError> {
+        let n = self.conn.query_row("SELECT COUNT(*) FROM clips", [], |row| row.get(0))?;
+        Ok(n)
+    }
+
     pub fn pinned_count(&self) -> Result<i64, StoreError> {
         let n = self.conn.query_row(
             "SELECT COUNT(*) FROM clips WHERE pinned_at IS NOT NULL",
@@ -614,6 +621,25 @@ impl Store {
             let plain = dpapi_unprotect(&blob).map_err(|e| StoreError::Dpapi(e.to_string()))?;
             return String::from_utf8(plain)
                 .map_err(|e| StoreError::Dpapi(e.to_string()));
+        }
+        content.ok_or(StoreError::NotFound(id))
+    }
+
+    /// Full plaintext for preview. Secrets never leave as raw values.
+    pub fn clip_plain_text(&self, id: i64) -> Result<String, StoreError> {
+        let row: Option<(Option<String>, i64)> = self
+            .conn
+            .query_row(
+                "SELECT content, is_secret FROM clips WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((content, is_secret)) = row else {
+            return Err(StoreError::NotFound(id));
+        };
+        if is_secret == 1 {
+            return Err(StoreError::IsSecret(id));
         }
         content.ok_or(StoreError::NotFound(id))
     }
@@ -1056,8 +1082,13 @@ fn hit_preview(is_secret: i64, kind: &str, hint: &str, content: &str) -> String 
     content.chars().take(60).collect()
 }
 
+/// Secret self-clear value meaning "keep until the user deletes it".
+pub const SECRET_TTL_NEVER: u32 = u32::MAX;
+
 fn secret_expiry(now_ms: i64, secret_ttl_hours: u32) -> i64 {
-    if secret_ttl_hours == 0 {
+    if secret_ttl_hours == SECRET_TTL_NEVER {
+        i64::MAX
+    } else if secret_ttl_hours == 0 {
         now_ms.saturating_sub(1)
     } else {
         now_ms.saturating_add(i64::from(secret_ttl_hours) * 3_600_000)
@@ -1270,6 +1301,13 @@ fn classify_kind(text: &str) -> &'static str {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn secret_expiry_hours_zero_and_never() {
+        assert_eq!(secret_expiry(1_000, 24), 1_000 + 24 * 3_600_000);
+        assert_eq!(secret_expiry(1_000, 0), 999);
+        assert_eq!(secret_expiry(1_000, SECRET_TTL_NEVER), i64::MAX);
+    }
 
     fn temp_db() -> (std::path::PathBuf, Store) {
         let n = SystemTime::now()
