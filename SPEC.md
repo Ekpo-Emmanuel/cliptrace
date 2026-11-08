@@ -110,11 +110,16 @@ CREATE TABLE clip_embeddings (
 ### search (M3, M5)
 1. `timeparse` extracts a time range from the query ("tuesday", "yesterday",
    "last week", "this morning", "3 days ago") and returns the remaining text.
-   Bare weekday = most recent past occurrence.
-2. Run FTS5 (BM25) and brute-force cosine over `clip_embeddings`, both filtered by the time range.
-3. Merge with reciprocal rank fusion (k = 60). Return top 5: id, time, source app,
-   preview (secrets shown masked, e.g. `sk_live_••••••••`).
-4. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
+   Bare weekday = most recent past occurrence. Day bounds are local midnight.
+   A clip matches if `first_seen_at <= range_end AND last_seen_at >= range_start`.
+2. Keyword: drop English stopwords, quote remaining terms, join with OR, rank with BM25.
+3. Vector: embed remaining text (BGE query prefix on the query only) and brute-force
+   dot product over time-filtered L2 vectors.
+4. Merge with reciprocal rank fusion (k = 60). Default `search` is hybrid.
+   `--keyword-only` / `--vector-only` / `--explain` / `--limit N`. If embeddings fail,
+   keyword-only plus one warning.
+5. Print: id, absolute local time, relative time, source exe, 60-char preview.
+6. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
 
 ### secrets (M6)
 - Detect: known prefixes (`sk_live_`, `sk_test_`, `ghp_`, `AKIA`, `xox[bp]-`, JWT shape,

@@ -1,7 +1,9 @@
 pub mod capture;
 pub mod config;
+pub mod rrf;
 pub mod search;
 pub mod store;
+pub mod timeparse;
 
 #[cfg(feature = "embeddings")]
 pub mod embed;
@@ -10,11 +12,13 @@ pub use capture::{CaptureConfig, CaptureError, ClipEvent, run_listener, set_clip
 pub use config::{Config, ConfigError, Paths, load_or_create};
 #[cfg(feature = "embeddings")]
 pub use embed::{
-    EmbedError, EmbedTestReport, EmbedWorker, Embedder, backfill_batch_size, backfill_sleep,
-    run_embed_test, warn_once,
+    BGE_QUERY_PREFIX, EmbedError, EmbedTestReport, EmbedWorker, Embedder, backfill_batch_size,
+    backfill_sleep, run_embed_test, warn_once,
 };
-pub use search::{escape_fts_query, relative_time};
+pub use rrf::{RRF_K, rank_index, reciprocal_rank_fusion};
+pub use search::{escape_fts_query, format_local_ms, fts_or_query, relative_time};
 pub use store::{
-    EMBED_DIMS, EMBED_MODEL, NewClip, SEARCH_TEXT_CHARS, SearchHit, StoredEmbedding, Store,
-    StoreError, UpsertOutcome, clip_hash, normalize_text,
+    EMBED_DIMS, EMBED_MODEL, NewClip, SEARCH_TEXT_CHARS, SearchHit, Store, StoreError,
+    StoredEmbedding, UpsertOutcome, clip_hash, normalize_text,
 };
+pub use timeparse::{ParsedQuery, local_from_unix_ms, parse_time_phrase};

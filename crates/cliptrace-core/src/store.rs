@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::search::escape_fts_query;
+use crate::search::fts_or_query;
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -149,33 +149,42 @@ impl Store {
         Ok(row)
     }
 
-    pub fn search_keyword(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, StoreError> {
-        let Some(match_query) = escape_fts_query(query) else {
-            return Ok(Vec::new());
-        };
+    pub fn search_keyword(
+        &self,
+        query: &str,
+        limit: usize,
+        range: Option<(i64, i64)>,
+    ) -> Result<Vec<SearchHit>, StoreError> {
         let limit = limit.max(1) as i64;
-        let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, '')
-             FROM clips_fts
-             JOIN clips c ON c.id = clips_fts.rowid
-             WHERE clips_fts MATCH ?1
-             ORDER BY bm25(clips_fts) ASC, c.last_seen_at DESC
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![match_query, limit], |row| {
-            let content: String = row.get(3)?;
-            Ok(SearchHit {
-                id: row.get(0)?,
-                last_seen_at: row.get(1)?,
-                source_exe: row.get(2)?,
-                preview: content.chars().take(60).collect(),
-            })
-        })?;
-        let mut hits = Vec::new();
-        for row in rows {
-            hits.push(row?);
+        let (start, end) = match range {
+            Some((s, e)) => (Some(s), Some(e)),
+            None => (None, None),
+        };
+        let overlap = "(?2 IS NULL OR (c.first_seen_at <= ?3 AND c.last_seen_at >= ?2))";
+        if let Some(match_query) = fts_or_query(query) {
+            let sql = format!(
+                "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, '')
+                 FROM clips_fts
+                 JOIN clips c ON c.id = clips_fts.rowid
+                 WHERE clips_fts MATCH ?1 AND {overlap}
+                 ORDER BY bm25(clips_fts) ASC, c.last_seen_at DESC
+                 LIMIT ?4"
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            return map_hits(stmt.query_map(params![match_query, start, end, limit], hit_from_row)?);
         }
-        Ok(hits)
+        if range.is_some() {
+            let sql = format!(
+                "SELECT c.id, c.last_seen_at, COALESCE(c.source_exe, ''), COALESCE(c.content, '')
+                 FROM clips c
+                 WHERE {overlap}
+                 ORDER BY c.last_seen_at DESC
+                 LIMIT ?4"
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            return map_hits(stmt.query_map(params!["", start, end, limit], hit_from_row)?);
+        }
+        Ok(Vec::new())
     }
 
     pub fn clip_content(&self, id: i64) -> Result<String, StoreError> {
@@ -248,7 +257,7 @@ impl Store {
         Ok(())
     }
 
-    /// `range` is inclusive `last_seen_at` in unix ms: `(start_ms, end_ms)`.
+    /// `range` is inclusive overlap: first_seen_at <= end AND last_seen_at >= start.
     pub fn list_embeddings(
         &self,
         range: Option<(i64, i64)>,
@@ -257,8 +266,7 @@ impl Store {
                           COALESCE(c.content, ''), e.model, e.embedding
                    FROM clip_embeddings e
                    JOIN clips c ON c.id = e.clip_id
-                   WHERE (?1 IS NULL OR c.last_seen_at >= ?1)
-                     AND (?2 IS NULL OR c.last_seen_at <= ?2)";
+                   WHERE (?1 IS NULL OR (c.first_seen_at <= ?2 AND c.last_seen_at >= ?1))";
         let (start, end) = match range {
             Some((s, e)) => (Some(s), Some(e)),
             None => (None, None),
@@ -283,7 +291,12 @@ impl Store {
         Ok(out)
     }
 
-    pub fn search_vector(&self, vector: &[f32], limit: usize) -> Result<Vec<SearchHit>, StoreError> {
+    pub fn search_vector(
+        &self,
+        vector: &[f32],
+        limit: usize,
+        range: Option<(i64, i64)>,
+    ) -> Result<Vec<SearchHit>, StoreError> {
         if vector.len() != EMBED_DIMS {
             return Err(StoreError::Embedding(format!(
                 "query embedding len {} != {EMBED_DIMS}",
@@ -293,7 +306,7 @@ impl Store {
         let query = l2_normalize(vector).ok_or_else(|| {
             StoreError::Embedding("cannot L2-normalize a zero query vector".into())
         })?;
-        let rows = self.list_embeddings(None)?;
+        let rows = self.list_embeddings(range)?;
         let scored: Vec<(f32, &StoredEmbedding)> = rows
             .iter()
             .filter(|row| row.embedding.len() == EMBED_DIMS)
@@ -310,6 +323,26 @@ impl Store {
             })
             .collect())
     }
+}
+
+fn hit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SearchHit> {
+    let content: String = row.get(3)?;
+    Ok(SearchHit {
+        id: row.get(0)?,
+        last_seen_at: row.get(1)?,
+        source_exe: row.get(2)?,
+        preview: content.chars().take(60).collect(),
+    })
+}
+
+fn map_hits(
+    rows: impl Iterator<Item = rusqlite::Result<SearchHit>>,
+) -> Result<Vec<SearchHit>, StoreError> {
+    let mut hits = Vec::new();
+    for row in rows {
+        hits.push(row?);
+    }
+    Ok(hits)
 }
 
 pub fn l2_normalize(vector: &[f32]) -> Option<Vec<f32>> {
@@ -479,16 +512,16 @@ mod tests {
             panic!("many");
         };
 
-        let hits = store.search_keyword("stripe", 5).expect("search");
+        let hits = store.search_keyword("stripe", 5, None).expect("search");
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].id, many_id, "higher term frequency ranks first");
         assert_eq!(hits[1].id, once_id);
 
         store
-            .search_keyword(r#"stripe -foo "bar" a:b *"#, 5)
+            .search_keyword(r#"stripe -foo "bar" a:b *"#, 5, None)
             .expect("special chars must not be FTS syntax errors");
 
-        let limited = store.search_keyword("stripe", 1).expect("limit");
+        let limited = store.search_keyword("stripe", 1, None).expect("limit");
         assert_eq!(limited.len(), 1);
         assert_eq!(limited[0].id, many_id);
 
@@ -545,7 +578,7 @@ mod tests {
         let in_range = store.list_embeddings(Some((1_500, 2_500))).unwrap();
         assert_eq!(in_range.len(), 1);
         assert_eq!(in_range[0].clip_id, id_b);
-        let hits = store.search_vector(&axis(0), 2).unwrap();
+        let hits = store.search_vector(&axis(0), 2, None).unwrap();
         assert_eq!(hits[0].id, id_a);
         assert_eq!(hits[1].id, id_b);
         let _ = std::fs::remove_dir_all(&dir);

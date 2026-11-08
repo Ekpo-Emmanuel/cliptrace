@@ -9,6 +9,8 @@ use thiserror::Error;
 
 use crate::store::{EMBED_DIMS, SEARCH_TEXT_CHARS, Store, StoreError};
 
+pub const BGE_QUERY_PREFIX: &str = "Represent this sentence for searching relevant passages: ";
+
 static EMBED_WARNED: AtomicBool = AtomicBool::new(false);
 
 const BACKFILL_BATCH: usize = 8;
@@ -67,6 +69,14 @@ impl Embedder {
             return Err(EmbedError::Dim(vec.len()));
         }
         Ok(vec)
+    }
+
+    pub fn embed_query(&mut self, text: &str, use_prefix: bool) -> Result<Vec<f32>, EmbedError> {
+        if use_prefix {
+            self.embed_one(&format!("{BGE_QUERY_PREFIX}{text}"))
+        } else {
+            self.embed_one(text)
+        }
     }
 }
 

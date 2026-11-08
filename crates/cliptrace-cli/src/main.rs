@@ -6,8 +6,9 @@ use cliptrace_core::{
     EmbedWorker, Embedder, backfill_batch_size, backfill_sleep, run_embed_test, warn_once,
 };
 use cliptrace_core::{
-    CaptureConfig, NewClip, Paths, Store, UpsertOutcome, load_or_create, relative_time,
-    run_listener, set_clipboard_text,
+    CaptureConfig, NewClip, Paths, RRF_K, SearchHit, Store, UpsertOutcome, format_local_ms,
+    load_or_create, local_from_unix_ms, parse_time_phrase, rank_index, reciprocal_rank_fusion,
+    relative_time, run_listener, set_clipboard_text,
 };
 
 fn main() -> Result<()> {
@@ -29,7 +30,7 @@ fn main() -> Result<()> {
         }
         _ => {
             eprintln!(
-                "Usage: cliptrace <watch | search [--limit N] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id>>"
+                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id>>"
             );
             std::process::exit(2);
         }
@@ -168,15 +169,140 @@ fn watch() -> Result<()> {
 }
 
 fn search_cmd(args: &[String]) -> Result<()> {
-    let (query, limit) = parse_search_args(args, "search")?;
+    let opts = parse_search_args(args)?;
+    let now_ms = unix_ms();
+    let parsed = parse_time_phrase(&opts.query, local_from_unix_ms(now_ms));
     let store = open_store()?;
-    print_hits(store.search_keyword(&query, limit).context("fts5 search")?)
+    let pool = opts.limit.max(50);
+
+    let keyword_hits = store
+        .search_keyword(&parsed.text, pool, parsed.range)
+        .context("fts5 search")?;
+    let keyword_ids: Vec<i64> = keyword_hits.iter().map(|h| h.id).collect();
+
+    let mut vector_hits = Vec::new();
+    let mut vector_ids: Vec<i64> = Vec::new();
+    let mut used_vector = false;
+    let mut prefix_plain_ids: Option<Vec<i64>> = None;
+
+    if !opts.keyword_only && cliptrace_core::fts_or_query(&parsed.text).is_some() {
+        match embed_search_vectors(&parsed.text, opts.explain) {
+            Ok(None) => {}
+            Ok(Some(emb)) => {
+                used_vector = true;
+                vector_hits = store
+                    .search_vector(&emb.prefixed, pool, parsed.range)
+                    .context("vector search")?;
+                vector_ids = vector_hits.iter().map(|h| h.id).collect();
+                if let Some(plain) = emb.plain {
+                    prefix_plain_ids = store.search_vector(&plain, 5, parsed.range).ok().map(|h| {
+                        h.into_iter().map(|x| x.id).collect()
+                    });
+                }
+            }
+            Err(err) => {
+                #[cfg(feature = "embeddings")]
+                warn_once(&err);
+                #[cfg(not(feature = "embeddings"))]
+                eprintln!("warning: {err}");
+            }
+        }
+    }
+
+    if opts.vector_only && !used_vector {
+        return print_hits(Vec::new(), now_ms, None);
+    }
+
+    let hits = if opts.keyword_only || !used_vector {
+        keyword_hits.iter().take(opts.limit).cloned().collect()
+    } else if opts.vector_only {
+        vector_hits.iter().take(opts.limit).cloned().collect()
+    } else {
+        let merged = reciprocal_rank_fusion(&[keyword_ids.clone(), vector_ids.clone()], RRF_K, opts.limit);
+        let mut by_id = std::collections::HashMap::new();
+        for hit in keyword_hits.iter().chain(vector_hits.iter()) {
+            by_id.entry(hit.id).or_insert_with(|| hit.clone());
+        }
+        merged
+            .into_iter()
+            .filter_map(|id| by_id.remove(&id))
+            .collect()
+    };
+
+    let prefix_note = prefix_plain_ids.map(|plain_ids| {
+        let pref: Vec<i64> = vector_ids.iter().copied().take(5).collect();
+        if pref == plain_ids {
+            format!("BGE query prefix did not change top-5 ids={pref:?}")
+        } else {
+            format!("BGE query prefix changed ranking prefixed={pref:?} plain={plain_ids:?}")
+        }
+    });
+
+    let explain = if opts.explain {
+        Some(Explain {
+            parsed_text: parsed.text.clone(),
+            range: parsed.range,
+            keyword_ids,
+            vector_ids,
+            prefix_note,
+        })
+    } else {
+        None
+    };
+    print_hits(hits, now_ms, explain.as_ref())
+}
+
+struct SearchOpts {
+    query: String,
+    limit: usize,
+    keyword_only: bool,
+    vector_only: bool,
+    explain: bool,
+}
+
+struct Explain {
+    parsed_text: String,
+    range: Option<(i64, i64)>,
+    keyword_ids: Vec<i64>,
+    vector_ids: Vec<i64>,
+    prefix_note: Option<String>,
+}
+
+struct EmbeddedQuery {
+    prefixed: Vec<f32>,
+    plain: Option<Vec<f32>>,
+}
+
+fn embed_search_vectors(text: &str, also_plain: bool) -> Result<Option<EmbeddedQuery>, String> {
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    #[cfg(feature = "embeddings")]
+    {
+        let paths = open_paths().map_err(|e| e.to_string())?;
+        let config = load_or_create(&paths).map_err(|e| e.to_string())?;
+        let dll = config.resolved_onnxruntime_path(&paths);
+        let mut embedder = cliptrace_core::Embedder::load(&paths.models_dir, &dll)
+            .map_err(|e| e.to_string())?;
+        let prefixed = embedder.embed_query(text, true).map_err(|e| e.to_string())?;
+        let plain = if also_plain {
+            Some(embedder.embed_query(text, false).map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+        Ok(Some(EmbeddedQuery { prefixed, plain }))
+    }
+    #[cfg(not(feature = "embeddings"))]
+    {
+        let _ = also_plain;
+        Err("embeddings feature unavailable".into())
+    }
 }
 
 fn vsearch_cmd(args: &[String]) -> Result<()> {
     #[cfg(feature = "embeddings")]
     {
-        let (query, limit) = parse_search_args(args, "vsearch")?;
+        let opts = parse_search_args(args)?;
         let paths = open_paths()?;
         let config = load_or_create(&paths).context("load config.toml")?;
         let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
@@ -188,14 +314,20 @@ fn vsearch_cmd(args: &[String]) -> Result<()> {
                 return Ok(());
             }
         };
-        let vector = match embedder.embed_one(&query) {
+        let vector = match embedder.embed_query(&opts.query, true) {
             Ok(v) => v,
             Err(err) => {
                 warn_once(&err.to_string());
                 return Ok(());
             }
         };
-        print_hits(store.search_vector(&vector, limit).context("vector search")?)
+        print_hits(
+            store
+                .search_vector(&vector, opts.limit, None)
+                .context("vector search")?,
+            unix_ms(),
+            None,
+        )
     }
     #[cfg(not(feature = "embeddings"))]
     {
@@ -259,49 +391,90 @@ fn backfill_cmd() -> Result<()> {
     }
 }
 
-fn print_hits(hits: Vec<cliptrace_core::SearchHit>) -> Result<()> {
+fn print_hits(hits: Vec<SearchHit>, now_ms: i64, explain: Option<&Explain>) -> Result<()> {
+    if let Some(ex) = explain {
+        match ex.range {
+            Some((start, end)) => eprintln!(
+                "explain\trange\t{}\t{}\ttext={}",
+                format_local_ms(start),
+                format_local_ms(end),
+                ex.parsed_text
+            ),
+            None => eprintln!("explain\trange\tnone\ttext={}", ex.parsed_text),
+        }
+        if let Some(note) = &ex.prefix_note {
+            eprintln!("explain\tprefix\t{note}");
+        }
+    }
     if hits.is_empty() {
         eprintln!("no matches");
         return Ok(());
     }
-    let now_ms = unix_ms();
     for hit in hits {
-        println!(
-            "{}\t{}\t{}\t{}",
+        print!(
+            "{}\t{}\t{}\t{}\t{}",
             hit.id,
+            format_local_ms(hit.last_seen_at),
             relative_time(hit.last_seen_at, now_ms),
             hit.source_exe,
             hit.preview
         );
+        if let Some(ex) = explain {
+            let kr = rank_index(&ex.keyword_ids, hit.id);
+            let vr = rank_index(&ex.vector_ids, hit.id);
+            print!(
+                "\tkw={}\tvec={}",
+                kr.map(|r| r.to_string()).unwrap_or_else(|| "-".into()),
+                vr.map(|r| r.to_string()).unwrap_or_else(|| "-".into())
+            );
+        }
+        println!();
     }
     Ok(())
 }
 
-fn parse_search_args(args: &[String], cmd: &str) -> Result<(String, usize)> {
+fn parse_search_args(args: &[String]) -> Result<SearchOpts> {
     let mut limit = 5usize;
     let mut query_parts: Vec<&str> = Vec::new();
+    let mut keyword_only = false;
+    let mut vector_only = false;
+    let mut explain = false;
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--limit" {
             i += 1;
             let Some(raw) = args.get(i) else {
-                bail!("Usage: cliptrace {cmd} [--limit N] <query>");
+                bail!("Usage: cliptrace search [--limit N] [--keyword-only] [--vector-only] [--explain] <query>");
             };
             limit = parse_limit(raw)?;
             i += 1;
         } else if let Some(raw) = args[i].strip_prefix("--limit=") {
             limit = parse_limit(raw)?;
             i += 1;
+        } else if args[i] == "--keyword-only" {
+            keyword_only = true;
+            i += 1;
+        } else if args[i] == "--vector-only" {
+            vector_only = true;
+            i += 1;
+        } else if args[i] == "--explain" {
+            explain = true;
+            i += 1;
         } else {
             query_parts.push(args[i].as_str());
             i += 1;
         }
     }
-    let query = query_parts.join(" ");
-    if query.trim().is_empty() {
-        bail!("Usage: cliptrace {cmd} [--limit N] <query>");
+    if keyword_only && vector_only {
+        bail!("use only one of --keyword-only and --vector-only");
     }
-    Ok((query, limit))
+    Ok(SearchOpts {
+        query: query_parts.join(" "),
+        limit,
+        keyword_only,
+        vector_only,
+        explain,
+    })
 }
 
 fn parse_limit(raw: &str) -> Result<usize> {
