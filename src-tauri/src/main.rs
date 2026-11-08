@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -29,6 +29,7 @@ struct AppState {
     skip_clipboard: Arc<AtomicBool>,
     recent: Arc<Mutex<Vec<ClipCard>>>,
     pending_deletes: Arc<Mutex<Vec<i64>>>,
+    ignore_blur_until: AtomicU64,
 }
 
 #[derive(Clone, Serialize)]
@@ -79,6 +80,7 @@ fn main() {
                 skip_clipboard: skip_clipboard.clone(),
                 recent: recent.clone(),
                 pending_deletes: pending_deletes.clone(),
+                ignore_blur_until: AtomicU64::new(0),
             });
             build_tray(app.handle(), paused, keyword_only)?;
             spawn_hotkey_thread(app.handle().clone());
@@ -102,6 +104,21 @@ fn main() {
             hide_popup,
             status,
         ])
+        .on_window_event(|window, event| {
+            if window.label() != "popup" {
+                return;
+            }
+            let tauri::WindowEvent::Focused(false) = event else {
+                return;
+            };
+            if let Some(state) = window.try_state::<AppState>() {
+                let until = state.ignore_blur_until.load(Ordering::SeqCst);
+                if (unix_ms() as u64) < until {
+                    return;
+                }
+            }
+            hide_popup_now(window.app_handle());
+        })
         .run(tauri::generate_context!())
         .expect("cliptrace-app");
 }
@@ -388,6 +405,11 @@ fn show_popup(app: &AppHandle) {
         let script = format!(
             "window.cliptraceOnOpen && window.cliptraceOnOpen({payload})"
         );
+        if let Some(state) = app.try_state::<AppState>() {
+            state
+                .ignore_blur_until
+                .store(unix_ms() as u64 + 400, Ordering::SeqCst);
+        }
         let _ = win.center();
         let _ = win.show();
         let _ = win.set_focus();
@@ -429,10 +451,14 @@ fn flush_pending(app: &AppHandle) {
     }
 }
 
+fn hide_popup_now(app: &AppHandle) {
+    flush_pending(app);
+    hide_popup_window(app);
+}
+
 #[tauri::command]
 fn hide_popup(app: AppHandle) {
-    flush_pending(&app);
-    hide_popup_window(&app);
+    hide_popup_now(&app);
 }
 
 fn open_store() -> Result<Store, String> {

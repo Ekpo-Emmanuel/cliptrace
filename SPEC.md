@@ -133,7 +133,7 @@ CREATE TABLE clip_embeddings (
 
 ### popup (M7, M8b)
 - One process: tray + clipboard listener + embed worker + hourly purge.
-- Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar.
+- Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar. Click outside (window blur) hides it and flushes pending deletes; ignore blur for ~400ms after show so the open path does not hide immediately.
 - Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
 - frontend: React + TS + Tailwind (Vite). System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
 - Opens on Recent with the first row selected and the search box focused. Empty search browses; typing ranks.
