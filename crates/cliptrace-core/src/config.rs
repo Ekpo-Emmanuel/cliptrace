@@ -120,3 +120,8 @@ pub fn load_or_create(paths: &Paths) -> Result<Config, ConfigError> {
     fs::write(&paths.config_path, toml::to_string_pretty(&config)?)?;
     Ok(config)
 }
+
+pub fn save(paths: &Paths, config: &Config) -> Result<(), ConfigError> {
+    fs::write(&paths.config_path, toml::to_string_pretty(config)?)?;
+    Ok(())
+}

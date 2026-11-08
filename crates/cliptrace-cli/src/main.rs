@@ -8,7 +8,7 @@ use cliptrace_core::{
 use cliptrace_core::{
     CaptureConfig, NewClip, Paths, RRF_K, SearchHit, Store, UpsertOutcome, format_local_ms,
     load_or_create, local_from_unix_ms, parse_time_phrase, rank_index, reciprocal_rank_fusion,
-    relative_time, run_listener, set_clipboard_text,
+    redact_secrets, relative_time, run_listener, set_clipboard_text,
 };
 
 fn main() -> Result<()> {
@@ -28,9 +28,12 @@ fn main() -> Result<()> {
             };
             copy_cmd(&id)
         }
+        Some("purge") => purge_cmd(),
+        Some("rescan") => rescan_cmd(),
+        Some("scrub") => scrub_cmd(),
         _ => {
             eprintln!(
-                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id>>"
+                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id> | purge | rescan | scrub>"
             );
             std::process::exit(2);
         }
@@ -89,6 +92,26 @@ fn watch() -> Result<()> {
     let paths = open_paths()?;
     let config = load_or_create(&paths).context("load config.toml")?;
     let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    let secret_ttl_hours = config.secret_ttl_hours;
+    let retention_days = config.retention_days;
+    match store.purge(unix_ms(), retention_days, secret_ttl_hours) {
+        Ok(n) => eprintln!("purge deleted={n}"),
+        Err(err) => eprintln!("purge error: {err}"),
+    }
+    {
+        let db_path = paths.db_path.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(3600));
+                if let Ok(store) = Store::open(&db_path) {
+                    match store.purge(unix_ms(), retention_days, secret_ttl_hours) {
+                        Ok(n) => eprintln!("purge deleted={n}"),
+                        Err(err) => eprintln!("purge error: {err}"),
+                    }
+                }
+            }
+        });
+    }
     #[cfg(feature = "embeddings")]
     let worker = {
         let dll = config.resolved_onnxruntime_path(&paths);
@@ -120,16 +143,20 @@ fn watch() -> Result<()> {
                     window_title: event.window_title.clone(),
                 },
                 now_ms,
+                secret_ttl_hours,
             );
             match outcome {
                 Ok(UpsertOutcome::Inserted { id }) => {
+                    let preview = store
+                        .display_preview(id)
+                        .unwrap_or_else(|_| "[clip]".to_string());
                     println!(
                         "stored\t{}\t{}\t{}\t{}\t{}",
                         id,
                         event.timestamp,
                         event.source_exe,
-                        event.window_title,
-                        preview(&event.text)
+                        redact_secrets(&event.window_title),
+                        preview
                     );
                     #[cfg(feature = "embeddings")]
                     if let Ok(search_text) = store.clip_search_text(id) {
@@ -137,13 +164,16 @@ fn watch() -> Result<()> {
                     }
                 }
                 Ok(UpsertOutcome::Duplicate { id, copy_count }) => {
+                    let preview = store
+                        .display_preview(id)
+                        .unwrap_or_else(|_| "[clip]".to_string());
                     println!(
                         "duplicate\t{}\t{}\t{}\t{}\t{}\tcount={}",
                         id,
                         event.timestamp,
                         event.source_exe,
-                        event.window_title,
-                        preview(&event.text),
+                        redact_secrets(&event.window_title),
+                        preview,
                         copy_count
                     );
                     #[cfg(feature = "embeddings")]
@@ -489,13 +519,42 @@ fn copy_cmd(id_raw: &str) -> Result<()> {
     let id: i64 = id_raw.parse().context("id must be an integer")?;
     let store = open_store()?;
     let content = store.clip_content(id)?;
+    let len = content.len();
     set_clipboard_text(&content).context("set clipboard")?;
-    eprintln!("copied id={id} ({len} chars)", len = content.len());
+    eprintln!("copied id={id} ({len} chars)");
     Ok(())
 }
 
-fn preview(text: &str) -> String {
-    text.chars().take(60).collect()
+fn purge_cmd() -> Result<()> {
+    let paths = open_paths()?;
+    let config = load_or_create(&paths).context("load config.toml")?;
+    let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    let n = store.purge(unix_ms(), config.retention_days, config.secret_ttl_hours)?;
+    eprintln!("purge deleted={n}");
+    Ok(())
+}
+
+fn scrub_cmd() -> Result<()> {
+    let paths = open_paths()?;
+    let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    store.scrub().context("scrub")?;
+    eprintln!("scrub ok db={}", paths.db_path.display());
+    Ok(())
+}
+
+fn rescan_cmd() -> Result<()> {
+    let paths = open_paths()?;
+    let config = load_or_create(&paths).context("load config.toml")?;
+    let store = Store::open(&paths.db_path).context("open cliptrace.db")?;
+    let report = store
+        .rescan_secrets(unix_ms(), config.secret_ttl_hours)
+        .context("rescan")?;
+    let _ = report.reembed;
+    eprintln!(
+        "rescan scanned={} converted={}",
+        report.scanned, report.converted
+    );
+    Ok(())
 }
 
 fn unix_ms() -> i64 {

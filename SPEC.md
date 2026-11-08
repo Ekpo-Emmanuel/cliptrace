@@ -122,10 +122,18 @@ CREATE TABLE clip_embeddings (
 6. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
 
 ### secrets (M6)
-- Detect: known prefixes (`sk_live_`, `sk_test_`, `ghp_`, `AKIA`, `xox[bp]-`, JWT shape,
-  PEM headers) + high-entropy token heuristic (length >= 20, Shannon entropy threshold).
-- On detection: `is_secret = 1`, encrypt value with DPAPI, build context-only
-  `search_text`, set `expires_at`.
+- Detect: known prefixes (`sk_live_`, `sk_test_`, `rk_live_`, `ghp_`, `github_pat_`,
+  `AKIA`+16, `xox[bp]-`, `AIza`, JWT shape, PEM headers, `user:pass@` URLs) plus a
+  high-entropy single-token heuristic (length >= 20, Shannon entropy, mixed classes).
+- On detection: `is_secret = 1`, `content` NULL, `content_enc` via DPAPI
+  (`CryptProtectData`, current-user), context-only `search_text`, `expires_at`.
+- Mask previews as `[stripe key sk_t…]`. `copy` decrypts with DPAPI.
+- `purge` deletes `expires_at < now` and normal clips older than `retention_days`
+  (FTS delete triggers + embedding CASCADE). Watch runs purge at start and hourly.
+- `rescan` converts existing plaintext secrets in place and re-queues embeddings
+  from the new context text. After convert: FTS rebuild, WAL checkpoint, VACUUM.
+- Every connection sets `PRAGMA secure_delete=ON`. `cliptrace scrub` checkpoints,
+  rebuilds FTS, and VACUUMs.
 - Config: `blocklist` (exe names), `secret_ttl_hours`, `retention_days` (default 90 for normal clips),
   `onnxruntime_path` (default `<data dir>\\runtime\\onnxruntime.dll`).
 
