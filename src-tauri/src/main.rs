@@ -497,7 +497,30 @@ fn show_popup(app: &AppHandle) {
         let _ = win.unminimize();
         let _ = win.set_focus();
         let _ = win.eval(script);
+        ensure_popup_focus(app, win);
     }
+}
+
+/// The first open after launch can miss focus: the webview is still starting, so no
+/// `Focused(true)` event arrives and click-outside never hides the popup. Retry the focus
+/// for a short while, and arm blur-to-hide once the window really has focus.
+fn ensure_popup_focus(app: &AppHandle, win: tauri::WebviewWindow) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..8 {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            if !win.is_visible().unwrap_or(false) {
+                return;
+            }
+            if win.is_focused().unwrap_or(false) {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.focus_armed.store(true, Ordering::SeqCst);
+                }
+                return;
+            }
+            let _ = win.set_focus();
+        }
+    });
 }
 
 fn hide_popup_window(app: &AppHandle) {
