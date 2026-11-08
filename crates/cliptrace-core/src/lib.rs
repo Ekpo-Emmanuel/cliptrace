@@ -1,5 +1,7 @@
+pub mod autostart;
 pub mod capture;
 pub mod config;
+pub mod hybrid;
 pub mod rrf;
 pub mod search;
 pub mod secrets;
@@ -9,7 +11,9 @@ pub mod timeparse;
 #[cfg(feature = "embeddings")]
 pub mod embed;
 
+pub use autostart::{AutostartError, set_autostart};
 pub use capture::{CaptureConfig, CaptureError, ClipEvent, run_listener, set_clipboard_text};
+pub use hybrid::{HybridOutcome, hybrid_search};
 pub use config::{Config, ConfigError, Paths, load_or_create, save};
 #[cfg(feature = "embeddings")]
 pub use embed::{

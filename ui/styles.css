@@ -1,0 +1,151 @@
+:root {
+  --paper: #e3c98a;
+  --paper-edge: #c9ad6e;
+  --carbon: #163a5f;
+  --ink: #24180f;
+  --stub: #7a4a32;
+  --paid: #b33a2b;
+  --rule: #c4a35a;
+  --mute: #6e5a3e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  color: var(--ink);
+  font: 14px/1.35 "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.ticket {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 11px,
+      rgba(36, 24, 15, 0.04) 11px 12px
+    ),
+    var(--paper);
+  border: 1px solid var(--paper-edge);
+  box-shadow: 0 18px 40px rgba(22, 58, 95, 0.28);
+}
+
+.perf {
+  height: 10px;
+  background:
+    radial-gradient(circle at 8px 10px, transparent 5px, var(--paper) 5.5px) 0 0 / 16px 10px;
+  border-bottom: 1px dashed var(--stub);
+}
+
+.stub {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 16px 6px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.14em;
+  color: var(--carbon);
+}
+
+.brand {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stub-id {
+  color: var(--paid);
+  letter-spacing: 0.08em;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+#q {
+  margin: 0 14px 8px;
+  border: 0;
+  border-bottom: 2px solid var(--carbon);
+  background: transparent;
+  color: var(--ink);
+  font: 16px/1.4 "Cascadia Mono", Consolas, monospace;
+  padding: 8px 2px;
+  outline: none;
+}
+
+#q:focus {
+  border-bottom-color: var(--paid);
+}
+
+.note {
+  margin: 0 16px 6px;
+  font-size: 12px;
+  color: var(--paid);
+}
+
+.guest {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow: auto;
+  flex: 1;
+}
+
+.guest li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 8px 9px;
+  border-bottom: 1px dotted var(--rule);
+  cursor: pointer;
+}
+
+.guest li[aria-selected="true"] {
+  background: rgba(179, 58, 43, 0.12);
+  box-shadow: inset 3px 0 0 var(--paid);
+}
+
+.preview {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: var(--mute);
+}
+
+.exe {
+  text-align: right;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 16px 10px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--mute);
+  border-top: 1px dashed var(--stub);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

@@ -27,6 +27,9 @@ pub struct Config {
     /// Empty or omitted: `<data dir>\\runtime\\onnxruntime.dll`.
     #[serde(default)]
     pub onnxruntime_path: String,
+    /// Global popup hotkey, e.g. `Ctrl+Alt+V`.
+    #[serde(default = "default_hotkey")]
+    pub hotkey: String,
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -37,6 +40,10 @@ fn default_retention_days() -> u32 {
     90
 }
 
+fn default_hotkey() -> String {
+    "Ctrl+Alt+V".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -44,6 +51,7 @@ impl Default for Config {
             secret_ttl_hours: default_secret_ttl_hours(),
             retention_days: default_retention_days(),
             onnxruntime_path: String::new(),
+            hotkey: default_hotkey(),
         }
     }
 }

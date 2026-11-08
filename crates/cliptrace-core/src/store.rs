@@ -73,7 +73,7 @@ pub struct StoredEmbedding {
     pub embedding: Vec<f32>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SearchHit {
     pub id: i64,
     pub last_seen_at: i64,

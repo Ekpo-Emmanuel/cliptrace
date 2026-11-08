@@ -31,9 +31,11 @@ fn main() -> Result<()> {
         Some("purge") => purge_cmd(),
         Some("rescan") => rescan_cmd(),
         Some("scrub") => scrub_cmd(),
+        Some("autostart") => autostart_cmd(true),
+        Some("no-autostart") => autostart_cmd(false),
         _ => {
             eprintln!(
-                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id> | purge | rescan | scrub>"
+                "Usage: cliptrace <watch | search [--limit N] [--keyword-only] [--vector-only] [--explain] <query> | vsearch [--limit N] <query> | backfill | embed-test <text> | copy <id> | purge | rescan | scrub | autostart | no-autostart>"
             );
             std::process::exit(2);
         }
@@ -555,6 +557,33 @@ fn rescan_cmd() -> Result<()> {
         report.scanned, report.converted
     );
     Ok(())
+}
+
+fn autostart_cmd(enabled: bool) -> Result<()> {
+    let exe = app_exe_path()?;
+    cliptrace_core::set_autostart(enabled, &exe).context("HKCU Run key")?;
+    if enabled {
+        eprintln!("autostart on exe={}", exe.display());
+    } else {
+        eprintln!("autostart off");
+    }
+    Ok(())
+}
+
+fn app_exe_path() -> Result<std::path::PathBuf> {
+    if let Ok(p) = std::env::var("CLIPTRACE_APP_EXE") {
+        let t = p.trim();
+        if !t.is_empty() {
+            return Ok(std::path::PathBuf::from(t));
+        }
+    }
+    let here = std::env::current_exe().context("current exe")?;
+    let sibling = here.with_file_name("cliptrace-app.exe");
+    if sibling.is_file() {
+        return Ok(sibling);
+    }
+    let paths = Paths::resolve().context("resolve data dir")?;
+    Ok(paths.data_dir.join("cliptrace-app.exe"))
 }
 
 fn unix_ms() -> i64 {

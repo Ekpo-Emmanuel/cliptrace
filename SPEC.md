@@ -121,6 +121,13 @@ CREATE TABLE clip_embeddings (
 5. Print: id, absolute local time, relative time, source exe, 60-char preview.
 6. `cliptrace copy <id>` puts the value back on the clipboard (decrypting secrets via DPAPI).
 
+### popup (M7)
+- One process: tray + clipboard listener + embed worker + hourly purge.
+- Named mutex single instance. Borderless always-on-top popup, skip taskbar.
+- Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
+- Plain HTML/TS UI. Debounced hybrid search. Enter copies (DPAPI) and hides. Esc / focus loss hide.
+- Never show raw secrets. `autostart` / `no-autostart` write HKCU Run.
+
 ### secrets (M6)
 - Detect: known prefixes (`sk_live_`, `sk_test_`, `rk_live_`, `ghp_`, `github_pat_`,
   `AKIA`+16, `xox[bp]-`, `AIza`, JWT shape, PEM headers, `user:pass@` URLs) plus a
@@ -148,7 +155,7 @@ Work one milestone at a time. Commit after each one passes.
 | M4 | Embeddings | New clips get vectors without blocking capture; `backfill` and `vsearch` work; capture/search survive a missing ONNX DLL |
 | M5 | Hybrid + time | `cliptrace search "stripe key from tuesday"` returns the right clip in the top 5 |
 | M6 | Secrets | Fake `sk_live_...` copy is stored encrypted, not findable by its characters, findable by "stripe key", purged after TTL |
-| M7 | Popup UI | Win+Shift+V opens a search box, Enter copies the result back and closes |
+| M7 | Popup UI | Ctrl+Alt+V (configurable `hotkey`) opens a search box, Enter copies the result back and closes |
 
 M1-M5 are the core product. If time runs short, cut from the bottom.
 
