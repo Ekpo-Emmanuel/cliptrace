@@ -11,3 +11,7 @@ dist
 /ui/dist
 # Local editor rules
 .cursor/
+
+# Local scratch logs
+release-build.log
+tauri-run.log
