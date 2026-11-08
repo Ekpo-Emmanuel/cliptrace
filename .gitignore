@@ -1,2 +1,9 @@
 /target
 /target-m6
+*.db
+*.db-wal
+*.db-shm
+*.bak
+.env
+node_modules
+dist
