@@ -34,6 +34,6 @@ Read SPEC.md before doing anything. It is the source of truth for architecture, 
 - If a dependency blocks progress for a long time (`ort`/ONNX, `sqlite-vec`), stop and tell me so we can decide whether to switch approaches.
 
 ## UI design
-- `design/stitch/DESIGN.md` is the source of truth for visual design (colors, type, spacing, radii, components). Read it before any UI change. Screenshots in `design/stitch/` are the visual check.
+- `design/v2/DESIGN.md` is the source of truth for visual design (colors, type, spacing, radii, components). Read it before any UI change. Screens in `design/v2/screens/` are the visual check.
 - Don't invent styles that aren't in DESIGN.md. If something is missing, extend it in the same spirit and tell me.
-- Where DESIGN.md conflicts with SPEC.md or the privacy rules (no network requests, no raw secrets rendered, fixed 760x560 popup), SPEC.md and the privacy rules win. Tell me about the conflict.
+- Where DESIGN.md conflicts with SPEC.md or the privacy rules (no network requests, no raw secrets rendered, popup sizes 880x580 full / 380x580 quick paste), SPEC.md and the privacy rules win. Tell me about the conflict.

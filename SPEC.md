@@ -133,9 +133,9 @@ CREATE TABLE clip_embeddings (
 
 ### popup (M7, M8b)
 - One process: tray + clipboard listener + embed worker + hourly purge.
-- Named mutex single instance. Borderless always-on-top popup, 760×560, centered, skip taskbar. Click outside (window blur) hides it and flushes pending deletes. Hide only after the popup has been focused once, and ignore blur for ~800ms after show so Ctrl+Alt+V key-up does not hide it. A thin top grab strip calls `startDragging` (after `begin_move` so blur-hide does not fire mid-drag).
+- Named mutex single instance. Borderless always-on-top popup, centered. Two modes: Full view 880×580 and Quick paste (compact) 380×580. The window resizes between modes; Quick paste screens are `design/v2/screens/*-compact.html`. Quick paste has no Pinned tab, skip taskbar. Click outside (window blur) hides it and flushes pending deletes. Hide only after the popup has been focused once, and ignore blur for ~800ms after show so Ctrl+Alt+V key-up does not hide it. A thin top grab strip calls `startDragging` (after `begin_move` so blur-hide does not fire mid-drag).
 - Default hotkey `Ctrl+Alt+V` in `config.toml` `hotkey`. Failed register: tray note, keep running.
-- frontend: React + TS + Tailwind (Vite). System fonts only. No network assets. Light and dark via `prefers-color-scheme`. Accent is `--accent`.
+- frontend: React + TS + Tailwind (Vite). Fonts (Bricolage Grotesque, Martian Mono) are bundled locally in `ui/src/assets/fonts/` and loaded with `@font-face`; no Google Fonts or other network assets. Dark and light themes both ship, following `prefers-color-scheme`. Visual source of truth is `design/v2/DESIGN.md`; reference screens are `design/v2/screens/*.html`. Secrets are never revealed in the UI: ignore the design's "hold to reveal". Image clips are out of scope for v1: skip `image-item.html`. Accent is `--accent`.
 - Opens on Recent with the first row selected and the search box focused. Empty search browses; typing ranks.
 - Tabs: Recent, Pinned (count), Tags. Search stays inside the current tab. `#` offers tag autocomplete.
 - List plus preview. Secrets stay masked. Enter copies the real value via `copy_clip` (decrypt in Rust, write clipboard, skip next capture so no duplicate row), toasts “Copied”, then hides.
