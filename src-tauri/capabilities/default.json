@@ -7,6 +7,7 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-center",
+    "core:window:allow-set-size",
     "core:window:allow-is-visible",
     "core:window:allow-start-dragging",
     "core:window:allow-unminimize"

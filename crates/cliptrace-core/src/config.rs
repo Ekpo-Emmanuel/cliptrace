@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -30,6 +30,9 @@ pub struct Config {
     /// Global popup hotkey, e.g. `Ctrl+Alt+V`.
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    /// Launch at Windows sign-in (HKCU Run). Mirrors the registry value we set.
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -52,6 +55,7 @@ impl Default for Config {
             retention_days: default_retention_days(),
             onnxruntime_path: String::new(),
             hotkey: default_hotkey(),
+            autostart: false,
         }
     }
 }

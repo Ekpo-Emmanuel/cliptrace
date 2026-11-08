@@ -1,5 +1,6 @@
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -71,11 +72,17 @@ impl std::fmt::Debug for ClipEvent {
 #[derive(Clone, Debug, Default)]
 pub struct CaptureConfig {
     pub blocklist: Vec<String>,
+    /// Optional shared list checked on every copy, so edits apply without a restart.
+    pub live_blocklist: Option<Arc<RwLock<Vec<String>>>>,
+    /// When set, copies are ignored (clipboard not even opened) while true.
+    pub paused: Option<Arc<AtomicBool>>,
 }
 
 struct ListenerState {
     tx: mpsc::Sender<ClipEvent>,
     blocklist: Vec<String>,
+    live_blocklist: Option<Arc<RwLock<Vec<String>>>>,
+    paused: Option<Arc<AtomicBool>>,
 }
 
 pub fn run_listener(
@@ -90,6 +97,8 @@ pub fn run_listener(
             .into_iter()
             .map(|s| s.to_ascii_lowercase())
             .collect(),
+        live_blocklist: config.live_blocklist,
+        paused: config.paused,
     })?;
 
     // Safety: hwnd is a window we created; the listener is removed before destroy.
@@ -173,7 +182,7 @@ unsafe extern "system" fn wnd_proc(
         WM_CLIPBOARDUPDATE => {
             let state = unsafe { window_state(hwnd) };
             if let Some(state) = state {
-                if let Some(event) = capture_once(&state.blocklist) {
+                if let Some(event) = capture_once(state) {
                     let _ = state.tx.send(event);
                 }
             }
@@ -203,11 +212,33 @@ unsafe fn window_state(hwnd: HWND) -> Option<&'static ListenerState> {
     }
 }
 
-fn capture_once(blocklist: &[String]) -> Option<ClipEvent> {
+fn capture_once(state: &ListenerState) -> Option<ClipEvent> {
+    let blocklist = &state.blocklist;
+    let live = state.live_blocklist.as_deref();
+    // Paused: do not open or read the clipboard at all.
+    if state
+        .paused
+        .as_ref()
+        .is_some_and(|p| p.load(Ordering::SeqCst))
+    {
+        return None;
+    }
     let source_exe = source_exe_name().unwrap_or_default();
     let exe_lower = source_exe.to_ascii_lowercase();
-    if !exe_lower.is_empty() && blocklist.iter().any(|b| b == &exe_lower) {
-        return None;
+    // Blocklist is checked before the clipboard is opened or read.
+    if !exe_lower.is_empty() {
+        if blocklist.iter().any(|b| b == &exe_lower) {
+            return None;
+        }
+        if let Some(live) = live {
+            if live
+                .read()
+                .map(|list| list.iter().any(|b| b == &exe_lower))
+                .unwrap_or(false)
+            {
+                return None;
+            }
+        }
     }
 
     if !open_clipboard_with_retry() {

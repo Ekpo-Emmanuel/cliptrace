@@ -3,7 +3,8 @@ use std::path::Path;
 use thiserror::Error;
 use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows::Win32::System::Registry::{
-    HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW, HKEY,
+    HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ, RegCloseKey, RegDeleteValueW,
+    RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY,
 };
 use windows::core::{PCWSTR, w};
 
@@ -55,4 +56,24 @@ fn path_to_wide(path: &Path) -> Result<Vec<u16>, AutostartError> {
     let mut wide: Vec<u16> = quoted.encode_utf16().collect();
     wide.push(0);
     Ok(wide)
+}
+
+/// True when the HKCU Run entry for Cliptrace exists. The registry is the
+/// source of truth, so this also sees entries made by `cliptrace autostart`.
+pub fn is_autostart_enabled() -> bool {
+    let mut key = HKEY::default();
+    // Safety: RUN_KEY is a static UTF-16 string; key out-pointer is valid.
+    let opened =
+        unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, RUN_KEY, 0, KEY_QUERY_VALUE, &mut key) };
+    if opened.is_err() {
+        return false;
+    }
+    // Safety: key was opened above; all optional out-pointers are None, so this
+    // only reports whether the value exists.
+    let found = unsafe { RegQueryValueExW(key, VALUE_NAME, None, None, None, None) };
+    // Safety: key was opened above and is closed exactly once.
+    unsafe {
+        let _ = RegCloseKey(key);
+    }
+    found.is_ok()
 }
