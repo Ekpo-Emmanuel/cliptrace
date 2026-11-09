@@ -2,6 +2,7 @@ pub mod autostart;
 pub mod capture;
 pub mod config;
 pub mod hybrid;
+pub mod kinds;
 pub mod rrf;
 pub mod search;
 pub mod secrets;

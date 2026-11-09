@@ -1042,17 +1042,7 @@ fn display_kind(is_secret: i64, kind_col: &str, content: &str) -> String {
     {
         return "link".into();
     }
-    if looks_like_code(content) {
-        return "code".into();
-    }
-    "text".into()
-}
-
-fn looks_like_code(text: &str) -> bool {
-    let lines = text.lines().count();
-    let has_block = text.contains('{') && text.contains('}');
-    let indented = text.lines().filter(|l| l.starts_with("    ") || l.starts_with('\t')).count();
-    has_block || (lines >= 3 && indented >= 2)
+    crate::kinds::detect(content).into()
 }
 
 fn hit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SearchHit> {

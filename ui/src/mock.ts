@@ -87,6 +87,30 @@ function seedCard(id: number): ClipCard {
   };
 }
 
+/** One clip of each structured kind, so browser dev shows every preview. */
+function typedSamples(): ClipCard[] {
+  const samples: Array<[string, string, string, string]> = [
+    ["email", "maya.lee@acme.dev", "outlook.exe", "Re: Q4 contract — Outlook"],
+    ["phone", "+1 (555) 123-4567", "msedge.exe", "Contact — Acme"],
+    ["color", "#ff8800", "Figma.exe", "Popup — Frame 12"],
+    ["path", "C:\\Users\\alex\\Documents\\Contracts\\acme-q4-signed.pdf", "explorer.exe", "Contracts"],
+    ["json", '{"id": 418, "status": "open", "labels": ["bug", "ui"]}', "Code.exe", "response.json"],
+    ["number", "1,284.50", "EXCEL.EXE", "Q3 forecast"],
+  ];
+  return samples.map(([kind, body, exe, title], i) => ({
+    id: 301 + i,
+    last_seen_at: ago((2 + i) * 3_600_000),
+    source_exe: exe,
+    window_title: title,
+    preview: body.slice(0, 80),
+    body,
+    kind,
+    tags: [],
+    pinned: false,
+    copy_count: 1,
+  }));
+}
+
 function sampleCards(): ClipCard[] {
   const featured: ClipCard[] = [
     {
@@ -198,7 +222,7 @@ function sampleCards(): ClipCard[] {
       copy_count: 1,
     },
   ];
-  const extra: ClipCard[] = [];
+  const extra: ClipCard[] = typedSamples();
   for (let i = 0; i < 100; i += 1) extra.push(seedCard(200 + i));
   return [...featured, ...extra].sort(
     (a, b) => b.last_seen_at - a.last_seen_at,

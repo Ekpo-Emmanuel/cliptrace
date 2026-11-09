@@ -2,6 +2,7 @@ import type { ClipCard, TagCount } from "../api";
 import { IconCopy, IconLock, IconPin, IconTrash } from "../icons";
 import { kindMark } from "../lib/kind";
 import { relTime } from "../lib/time";
+import { ClipContent } from "./ClipContent";
 import { TagEditor } from "./TagEditor";
 
 type Props = {
@@ -19,90 +20,6 @@ type Props = {
 
 function sourceName(exe: string) {
   return exe.replace(/\.exe$/i, "") || "unknown";
-}
-
-function parseLink(raw: string) {
-  try {
-    return new URL(raw.trim());
-  } catch {
-    return null;
-  }
-}
-
-function Content({ card }: { card: ClipCard }) {
-  if (card.kind === "secret") {
-    return (
-      <div>
-        <span className="hatch" style={{ width: 220 }} />
-        <span className="hatch mt-2" style={{ width: 150 }} />
-        <p
-          className="mt-4 font-mono text-[10.5px]"
-          style={{ color: "var(--muted)" }}
-        >
-          {card.preview}
-        </p>
-        <p
-          className="mt-1 font-mono text-[10px]"
-          style={{ color: "var(--faint)" }}
-        >
-          encrypted · kept out of search
-        </p>
-      </div>
-    );
-  }
-
-  if (card.kind === "code") {
-    const lines = card.body.split("\n");
-    return (
-      <table className="border-collapse font-mono text-[11.5px] leading-[1.95]">
-        <tbody>
-          {lines.map((line, i) => (
-            <tr key={i}>
-              <td
-                className="w-8 pr-3 text-right select-none"
-                style={{ color: "var(--accent)" }}
-              >
-                {i + 1}
-              </td>
-              <td className="whitespace-pre" style={{ color: "var(--text)" }}>
-                {line || " "}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    );
-  }
-
-  if (card.kind === "link") {
-    const url = parseLink(card.body);
-    return (
-      <div>
-        <p className="text-[46px] leading-none font-extrabold tracking-[-0.04em] [font-variation-settings:'opsz'_96]">
-          {url ? url.host.replace(/^www\./, "") : card.body}
-        </p>
-        <p
-          className="mt-4 font-mono text-[11.5px] leading-[1.6] break-all"
-          style={{ color: "var(--muted)" }}
-        >
-          {card.body}
-        </p>
-      </div>
-    );
-  }
-
-  const long = card.body.length > 160;
-  return (
-    <p
-      className={`whitespace-pre-wrap break-words ${
-        long
-          ? "text-[18px] leading-[1.4] font-medium tracking-[-0.01em]"
-          : "text-[31px] leading-[1.16] font-medium tracking-[-0.022em] [font-variation-settings:'opsz'_72]"
-      }`}
-    >
-      {card.body}
-    </p>
-  );
 }
 
 export function PreviewPane({
@@ -151,7 +68,15 @@ export function PreviewPane({
           style={{ color: "var(--faint)" }}
         >
           <span style={{ color: "var(--accent)" }}>{code}</span> {app}
-          {title ? ` / ${title}` : ""}
+          {title && (
+            <>
+              <span className="opacity-20" aria-hidden="true">
+                {" "}
+                /{" "}
+              </span>
+              {title}
+            </>
+          )}
         </p>
         <div className="flex shrink-0 items-center gap-0.5">
           <button
@@ -210,7 +135,7 @@ export function PreviewPane({
             onCopy();
           }}
         >
-          <Content card={card} />
+          <ClipContent card={card} />
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <button type="button" className="btn-go" onClick={onCopy}>
