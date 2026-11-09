@@ -465,7 +465,6 @@ input:focus-visible {
   border: 0;
   background: var(--accent);
   color: var(--ink);
-  box-shadow: var(--glow-button);
 }
 .btn-go .keycap {
   border-color: color-mix(in srgb, var(--ink) 35%, transparent);
@@ -506,15 +505,15 @@ input:focus-visible {
 }
 .txt-link {
   border: 0;
+  color: var(--faint);
   background: none;
-  color: var(--accent);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10.5px;
   text-underline-offset: 4px;
 }
 .txt-link:hover {
-  text-decoration: underline;
+  color: var(--accent);
 }
 
 /* ---- trace list ---- */
@@ -523,7 +522,6 @@ input:focus-visible {
   grid-template-columns: 58px 26px 1fr;
   height: 62px;
   cursor: pointer;
-
 }
 .trow:hover .tbody {
   background: var(--panel);
@@ -624,11 +622,7 @@ input:focus-visible {
 
 /* ---- preview ---- */
 .pv-grid {
-  background-image: radial-gradient(
-    circle,
-    var(--line) 1px,
-    transparent 1.3px
-  );
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.3px);
   background-size: 20px 20px;
   mask-image: linear-gradient(200deg, #000, transparent 70%);
   -webkit-mask-image: linear-gradient(200deg, #000, transparent 70%);
@@ -667,7 +661,7 @@ input:focus-visible {
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--muted);
+  color: var(--text);
 }
 .tagchip:hover {
   color: var(--text);

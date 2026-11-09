@@ -34,12 +34,17 @@ export function TagEditor({ card, allTags, onAdd, onRemove }: Props) {
         <button
           key={name}
           type="button"
-          className="tagchip"
+          className="tagchip group"
           aria-label={`Remove tag ${name}`}
           onClick={() => onRemove(name)}
         >
           #{name}
-          <span style={{ color: "var(--faint)" }}>×</span>
+          <span
+            aria-hidden="true"
+            className="text-[color:var(--faint)] transition-colors group-hover:text-[color:var(--accent)] group-focus-visible:text-[color:var(--accent)]"
+          >
+            ×
+          </span>
         </button>
       ))}
       <input
