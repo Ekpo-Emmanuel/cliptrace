@@ -236,6 +236,8 @@ export function createMockApi(): CliptraceApi {
     retention_days: 90,
     blocklist: ["keepass.exe", "1password.exe"],
     autostart: false,
+    // Browser dev: open /?welcome to preview the first-run screen.
+    welcomed: !new URLSearchParams(window.location.search).has("welcome"),
     data_dir: "C:\Users\you\AppData\Local\Cliptrace",
     version: "0.1.0",
   };

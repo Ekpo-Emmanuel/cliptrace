@@ -33,6 +33,14 @@ pub struct Config {
     /// Launch at Windows sign-in (HKCU Run). Mirrors the registry value we set.
     #[serde(default)]
     pub autostart: bool,
+    /// Whether the first-run welcome screen has been dismissed. A config file written before
+    /// this field existed counts as welcomed, so upgrading users are not greeted again.
+    #[serde(default = "default_welcomed")]
+    pub welcomed: bool,
+}
+
+fn default_welcomed() -> bool {
+    true
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -56,6 +64,7 @@ impl Default for Config {
             onnxruntime_path: String::new(),
             hotkey: default_hotkey(),
             autostart: false,
+            welcomed: false,
         }
     }
 }
@@ -180,5 +189,22 @@ mod tests {
             ..Config::default()
         };
         assert_eq!(config.resolved_onnxruntime_path(&paths), paths.onnxruntime_dll());
+    }
+
+    #[test]
+    fn a_new_install_is_not_welcomed_but_an_older_config_file_is() {
+        assert!(!Config::default().welcomed);
+        let old: Config = toml::from_str("retention_days = 30\n").unwrap();
+        assert!(old.welcomed);
+    }
+
+    #[test]
+    fn a_fresh_config_file_records_that_the_welcome_is_pending() {
+        let paths = paths_in("welcome");
+        let created = load_or_create(&paths).unwrap();
+        assert!(!created.welcomed);
+        let reread = load_or_create(&paths).unwrap();
+        assert!(!reread.welcomed);
+        let _ = fs::remove_dir_all(&paths.data_dir);
     }
 }

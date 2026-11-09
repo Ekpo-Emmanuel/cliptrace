@@ -101,6 +101,7 @@ fn main() {
             build_tray(app.handle(), paused, keyword_only)?;
             spawn_hotkey_thread(app.handle().clone());
             warmup_embedder(app.handle().clone());
+            open_welcome_on_first_run(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -461,6 +462,24 @@ fn notify_hotkey_failed(app: &AppHandle, hotkey: &str) {
     }
 }
 
+/// On the first launch after install the app would otherwise sit silently in the tray, so open
+/// the popup once; the UI shows the welcome screen while `welcomed` is false.
+fn open_welcome_on_first_run(app: AppHandle) {
+    std::thread::spawn(move || {
+        let pending = cliptrace_core::Paths::resolve()
+            .ok()
+            .and_then(|paths| load_or_create(&paths).ok())
+            .is_some_and(|config| !config.welcomed);
+        if !pending {
+            return;
+        }
+        // Give the hidden webview time to load its UI before the window is shown.
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || show_popup(&handle));
+    });
+}
+
 fn show_popup(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("popup") {
         let cached = app
@@ -816,6 +835,7 @@ struct SettingsDto {
     retention_days: u32,
     blocklist: Vec<String>,
     autostart: bool,
+    welcomed: bool,
     data_dir: String,
     version: String,
 }
@@ -823,6 +843,7 @@ struct SettingsDto {
 #[derive(Deserialize, Default)]
 struct SettingsPatch {
     paused: Option<bool>,
+    welcomed: Option<bool>,
     autostart: Option<bool>,
     secret_ttl_hours: Option<u32>,
     retention_days: Option<u32>,
@@ -838,6 +859,7 @@ fn settings_dto(state: &AppState, config: &cliptrace_core::Config, data_dir: &st
         retention_days: config.retention_days,
         blocklist: config.blocklist.clone(),
         autostart: cliptrace_core::is_autostart_enabled(),
+        welcomed: config.welcomed,
         data_dir: data_dir.to_string_lossy().into_owned(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     }
@@ -895,6 +917,9 @@ fn update_settings(
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         cliptrace_core::set_autostart(enabled, &exe).map_err(|e| e.to_string())?;
         config.autostart = enabled;
+    }
+    if let Some(done) = patch.welcomed {
+        config.welcomed = done;
     }
     cliptrace_core::save(&paths, &config).map_err(|e| e.to_string())?;
 
