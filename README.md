@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="branding/logo.svg" alt="Cliptrace logo" width="96" height="96">
+</p>
+
 # Cliptrace
 
 A clipboard history for Windows that lives on your PC and searches by meaning. Every text you copy is saved and indexed on your machine, so you can type "that Stripe key thing from Tuesday" and get it back.
