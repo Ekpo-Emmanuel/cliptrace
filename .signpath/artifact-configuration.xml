@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reference copy of the SignPath artifact configuration for this project.
+  SignPath keeps its own copy: paste this into the project's artifact configuration in the
+  SignPath web app, which validates it.
+
+  The workflow uploads the folder "unsigned" (a zip) with two files, built by .github/workflows/release.yml:
+    Cliptrace-setup.exe   the NSIS installer people download
+    cliptrace-app.exe     the app itself, which also ships inside the portable zip
+
+  SignPath's free open source terms also require metadata restrictions: set the product name to
+  "Cliptrace" and the product version to the release version in the same configuration, using
+  the editor in the SignPath web app. The installer's CompanyName field is empty today.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Cliptrace-setup.exe">
+      <authenticode-sign/>
+    </pe-file>
+    <pe-file path="cliptrace-app.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

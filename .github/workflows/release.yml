@@ -1,0 +1,191 @@
+name: Release
+
+# Run by hand from the main branch (Actions tab, Run workflow). It builds the installer on a
+# GitHub-hosted runner, signs it through SignPath when that is set up, and leaves a DRAFT
+# release for you to read, edit and publish. See docs/code-signing-setup.md.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The ONNX Runtime the app is tested with. The zip hash is the sha256 GitHub publishes for
+  # this release asset, so a changed or tampered download fails the build.
+  ONNX_VERSION: "1.28.0"
+  ONNX_ZIP_SHA256: "abef733dacbe2f571547a7150b479b5cb9cc0df22f96c24983a42cadb1b4f8bc"
+  # The two DLLs inside that zip, as shipped in 0.4.1.
+  ONNX_DLL_SHA256: "18370C375F07357FA5874344A9D9AC17E6B6FE1EB18B1DD209D79483B4470257"
+  ONNX_PROVIDERS_DLL_SHA256: "599629FA643707DEFE9156140AE5EDD73531F221AA97B7585B1C9BB0A93586F8"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      unsigned-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read the version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Fetch ONNX Runtime (pinned and verified)
+        shell: pwsh
+        run: |
+          $ver = $env:ONNX_VERSION
+          $url = "https://github.com/microsoft/onnxruntime/releases/download/v$ver/onnxruntime-win-x64-$ver.zip"
+          Invoke-WebRequest -Uri $url -OutFile ort.zip
+          $zipHash = (Get-FileHash ort.zip -Algorithm SHA256).Hash
+          if ($zipHash -ne $env:ONNX_ZIP_SHA256.ToUpper()) { throw "ONNX Runtime zip hash mismatch: $zipHash" }
+          Expand-Archive ort.zip -DestinationPath ort
+          $root = "ort/onnxruntime-win-x64-$ver"
+          New-Item -ItemType Directory -Force src-tauri/runtime | Out-Null
+          Copy-Item "$root/lib/onnxruntime.dll", "$root/lib/onnxruntime_providers_shared.dll" src-tauri/runtime/
+          Copy-Item "$root/LICENSE" src-tauri/runtime/LICENSE-onnxruntime.txt
+          $dll = (Get-FileHash src-tauri/runtime/onnxruntime.dll -Algorithm SHA256).Hash
+          $prov = (Get-FileHash src-tauri/runtime/onnxruntime_providers_shared.dll -Algorithm SHA256).Hash
+          if ($dll -ne $env:ONNX_DLL_SHA256.ToUpper()) { throw "onnxruntime.dll hash mismatch: $dll" }
+          if ($prov -ne $env:ONNX_PROVIDERS_DLL_SHA256.ToUpper()) { throw "onnxruntime_providers_shared.dll hash mismatch: $prov" }
+
+      - name: Install UI dependencies
+        run: npm --prefix ui ci
+
+      - name: Test the core library
+        run: cargo test -p cliptrace-core
+
+      - name: Build the app and the installer
+        working-directory: src-tauri
+        run: ..\ui\node_modules\.bin\tauri.cmd build
+
+      - name: Collect the files to sign and ship
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force unsigned, payload | Out-Null
+          # Fixed names, so the SignPath artifact configuration does not depend on the version.
+          Copy-Item "target/release/bundle/nsis/Cliptrace_${v}_x64-setup.exe" unsigned/Cliptrace-setup.exe
+          Copy-Item target/release/cliptrace-app.exe unsigned/cliptrace-app.exe
+          # Already signed by Microsoft; shipped as they are.
+          Copy-Item src-tauri/runtime/* payload/
+          Copy-Item LICENSE payload/LICENSE
+
+      - name: Upload the unsigned files
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned
+          path: unsigned
+          if-no-files-found: error
+
+      - name: Upload the files that ship unchanged
+        uses: actions/upload-artifact@v4
+        with:
+          name: payload
+          path: payload
+          if-no-files-found: error
+
+  sign:
+    # Skipped until SignPath is set up (repository variable SIGNPATH_ORGANIZATION_ID).
+    needs: build
+    if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Sign with SignPath
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ needs.build.outputs.unsigned-artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Keep the signed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed
+          path: signed
+          if-no-files-found: error
+
+  release:
+    needs: [build, sign]
+    # Run when signing succeeded, or was skipped because SignPath is not set up yet.
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped') }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the files that ship unchanged
+        uses: actions/download-artifact@v4
+        with:
+          name: payload
+          path: payload
+
+      - name: Download the signed files
+        if: ${{ needs.sign.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: signed
+          path: files
+
+      - name: Download the unsigned files
+        if: ${{ needs.sign.result != 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned
+          path: files
+
+      - name: Check the signatures
+        if: ${{ needs.sign.result == 'success' }}
+        shell: pwsh
+        run: |
+          foreach ($f in 'Cliptrace-setup.exe', 'cliptrace-app.exe') {
+            $s = Get-AuthenticodeSignature "files/$f"
+            "$f : $($s.Status) : $($s.SignerCertificate.Subject)"
+            if ($s.Status -ne 'Valid') { throw "$f is not validly signed" }
+          }
+
+      - name: Assemble the release files
+        id: assemble
+        shell: pwsh
+        run: |
+          $v = "${{ needs.build.outputs.version }}"
+          New-Item -ItemType Directory -Force out, "zip/Cliptrace-$v-win64" | Out-Null
+          Copy-Item files/Cliptrace-setup.exe out/Cliptrace-setup.exe
+          Copy-Item files/Cliptrace-setup.exe "out/Cliptrace_${v}_x64-setup.exe"
+          Copy-Item files/cliptrace-app.exe "zip/Cliptrace-$v-win64/cliptrace-app.exe"
+          Copy-Item payload/* "zip/Cliptrace-$v-win64/"
+          Compress-Archive -Path "zip/Cliptrace-$v-win64/*" -DestinationPath "out/Cliptrace-$v-win64.zip"
+          $signed = "${{ needs.sign.result }}" -eq "success"
+          $lines = @("## Cliptrace $v", "", "TODO: describe what is new in this release.", "")
+          if (-not $signed) { $lines += "_This build is not code signed._", "" }
+          $lines += "### Checksums (SHA-256)", ""
+          foreach ($f in "Cliptrace_${v}_x64-setup.exe", "Cliptrace-$v-win64.zip") {
+            $lines += "- ``$f``: ``$((Get-FileHash "out/$f" -Algorithm SHA256).Hash)``"
+          }
+          $lines += "- ``Cliptrace-setup.exe`` is the same file as ``Cliptrace_${v}_x64-setup.exe``."
+          Set-Content -Path release-notes.md -Value $lines
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Create a draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.assemble.outputs.version }}"
+          gh release create "v$v" --draft --target "${{ github.sha }}" --title "Cliptrace $v" --notes-file release-notes.md "out/Cliptrace_${v}_x64-setup.exe" "out/Cliptrace-setup.exe" "out/Cliptrace-$v-win64.zip"
