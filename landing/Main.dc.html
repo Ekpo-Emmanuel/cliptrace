@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cliptrace — the trace</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:'Bricolage Grotesque';src:url('/fonts/Bricolage-Variable.ttf') format('truetype');font-weight:200 800;font-style:normal;font-display:swap}
+@font-face{font-family:'Martian Mono';src:url('/fonts/MartianMono-Variable.ttf') format('truetype');font-weight:100 800;font-style:normal;font-display:swap}
+body{margin:0;background:#0F0E0C}
+a{color:#FFB547}a:hover{color:#FFD08A}
+.tr{--bg:#0F0E0C;--panel:#16140F;--raise:#1D1A14;--line:#2C2922;--text:#EFE8DA;--muted:#B3AB9A;--faint:#8C8474;--ink:#1A1206;--bad:#FF7A66}
+.tr,.tr button,.tr input{font-family:'Bricolage Grotesque','Segoe UI Variable Display',sans-serif}
+.tr button{cursor:pointer}
+.tr .m{font-family:'Martian Mono',ui-monospace,Consolas,monospace}
+.tr :focus-visible{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.tr .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tr input::placeholder{color:var(--faint)}
+.tr .scroll{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+
+.tr .wm{font-weight:800;font-size:19px;letter-spacing:-0.03em;line-height:1}
+.tr .wm.dim .t2{color:var(--faint)}
+.tr .pz{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:2px;background:var(--accent);color:var(--ink);font-family:'Martian Mono',monospace;font-size:9.5px;font-weight:500}
+.tr .seg{flex:none;display:flex;align-items:center;gap:2px;height:30px;padding:2px;box-sizing:border-box;border:1px solid var(--line);border-radius:4px}
+.tr .flt{height:24px;padding:0 10px;border:0;border-radius:2px;background:transparent;color:var(--faint);font-family:'Martian Mono',monospace;font-size:10.5px;display:inline-flex;align-items:center;gap:7px}
+.tr .flt:hover{color:var(--text)}
+.tr .flt.on{color:var(--text);background:var(--raise)}
+.tr .flt .dot{width:5px;height:5px;border-radius:50%;border:1px solid var(--line)}
+.tr .flt .dia{width:5px;height:5px;transform:rotate(45deg);border:1px solid var(--line);border-radius:1px}
+.tr .flt.on .dot,.tr .flt.on .dia{background:var(--accent);border-color:var(--accent);box-shadow:0 0 6px var(--accent)}
+.tr .flt .c{color:var(--faint)}
+.tr .ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:3px;background:transparent;color:var(--muted);text-decoration:none}
+.tr .ico:hover{background:var(--raise);color:var(--text)}
+.tr .ico.on{color:var(--accent)}
+.tr .ico.fail{color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.tr .ico.danger:hover{color:var(--bad)}
+
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 70%,transparent)}100%{box-shadow:0 0 0 9px transparent}}
+@keyframes sweep{0%{clip-path:inset(0 100% 0 0)}45%,75%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 100%)}}
+
+.tr .day{display:grid;grid-template-columns:58px 26px minmax(0,1fr);height:34px;align-items:end}
+.tr .day .lbl{grid-column:3;padding-bottom:8px;font-family:'Martian Mono',monospace;font-size:10px;color:var(--faint)}
+.tr .row{display:grid;grid-template-columns:58px 26px minmax(0,1fr);width:100%;height:62px;padding:0 16px 0 0;border:0;background:transparent;color:var(--text);text-align:left}
+.tr .row:hover .body{background:var(--panel)}
+.tr .row.sel .body{background:var(--raise)}
+.tr .row.chk .body{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.tr .row.gone{opacity:.5;cursor:default}
+.tr .row.gone .line{text-decoration:line-through;text-decoration-color:var(--bad)}
+.tr .row.gone:hover .body{background:transparent}
+.tr .tm{padding-top:15px;text-align:right;font-family:'Martian Mono',monospace;font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums}
+.tr .row.sel .tm,.tr .row.chk .tm{color:var(--accent)}
+.tr .sp{position:relative;align-self:stretch}
+.tr .sp::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line);transform:translateX(-50%)}
+.tr .sp.dash::before{background:repeating-linear-gradient(to bottom,var(--faint) 0 3px,transparent 3px 8px)}
+.tr .lit{position:absolute;left:50%;top:0;width:2px;height:0;transform:translateX(-50%);background:var(--accent);box-shadow:0 0 10px var(--accent);transition:height .18s linear}
+.tr .lit.full{height:100%}
+.tr .lit.half{height:21px}
+.tr .node{position:absolute;left:50%;top:21px;width:7px;height:7px;box-sizing:border-box;border-radius:50%;background:var(--bg);border:1.5px solid var(--faint);transform:translate(-50%,-50%);transition:all .2s;display:flex;align-items:center;justify-content:center}
+.tr .node.past{border-color:var(--accent)}
+.tr .node.pin{border-radius:1px;transform:translate(-50%,-50%) rotate(45deg);background:var(--faint);border-color:var(--faint)}
+.tr .node.pin.past{background:var(--accent);border-color:var(--accent)}
+.tr .node.sel{width:11px;height:11px;background:var(--accent);border-color:var(--accent);animation:ping 1.6s ease-out infinite}
+.tr .node.box{width:13px;height:13px;border-radius:2px;transform:translate(-50%,-50%);background:var(--bg);border-color:var(--faint)}
+.tr .node.box.on{background:var(--accent);border-color:var(--accent);box-shadow:0 0 10px color-mix(in srgb,var(--accent) 55%,transparent);color:var(--ink)}
+.tr .node.gone{border-style:dashed;border-color:var(--bad);background:transparent;animation:none}
+.tr .body{display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;padding:0 12px;margin:3px 0;border-radius:4px;transition:background .15s}
+.tr .line{font-size:14.5px;font-weight:500;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.005em}
+.tr .line.mono{font-family:'Martian Mono',monospace;font-size:11.5px;font-weight:400;letter-spacing:0}
+.tr .src{font-family:'Martian Mono',monospace;font-size:9.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr .src .tg{color:var(--muted)}
+.tr .hatch{display:inline-block;height:12px;vertical-align:middle;background:repeating-linear-gradient(135deg,var(--muted) 0 2px,transparent 2px 5px);border-radius:1px}
+
+.tr .stage{position:relative;overflow:hidden}
+.tr .stage::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,var(--line) 1px,transparent 1.3px);background-size:20px 20px;-webkit-mask-image:linear-gradient(200deg,#000 0%,transparent 70%);mask-image:linear-gradient(200deg,#000 0%,transparent 70%);pointer-events:none}
+.tr .ghost{position:absolute;right:-14px;top:-46px;font-size:250px;font-weight:800;letter-spacing:-0.06em;line-height:1;color:transparent;-webkit-text-stroke:1px var(--line);pointer-events:none;user-select:none;font-variant-numeric:tabular-nums}
+.tr .meta{font-family:'Martian Mono',monospace;font-size:10px;color:var(--faint);display:flex;gap:10px;align-items:center;white-space:nowrap}
+.tr .meta .a{color:var(--accent)}
+.tr .big{margin:0;font-size:31px;font-weight:500;line-height:1.16;letter-spacing:-0.022em;max-width:15em;white-space:pre-wrap;color:var(--text);font-variation-settings:'opsz' 72}
+.tr .host{font-size:46px;font-weight:800;letter-spacing:-0.04em;line-height:1;font-variation-settings:'opsz' 96}
+.tr .code{font-family:'Martian Mono',monospace;font-size:11.5px;line-height:1.95;display:grid;grid-template-columns:26px minmax(0,1fr)}
+.tr .code .n{color:var(--accent);opacity:.75;text-align:right;padding-right:14px}
+.tr .code .t{white-space:pre;color:var(--text)}
+.tr .crop{position:absolute;width:14px;height:14px;border-color:var(--accent);border-style:solid;border-width:0}
+.tr .tagx{padding:0;border:0;background:transparent;color:var(--text);font-family:'Martian Mono',monospace;font-size:11px;display:inline-flex;gap:6px;align-items:center}
+.tr .tagx .x{color:var(--faint)}
+.tr .tagx:hover .x{color:var(--accent)}
+.tr .addt{padding:0;border:0;background:transparent;color:var(--faint);font-family:'Martian Mono',monospace;font-size:11px}
+.tr .addt:hover{color:var(--accent)}
+.tr .stat{display:flex;flex-direction:column;gap:6px;padding:0 18px;border-left:1px solid var(--line);min-width:0}
+.tr .stat:first-child{padding-left:0;border-left:0}
+.tr .stat .k{font-family:'Martian Mono',monospace;font-size:9px;color:var(--faint);letter-spacing:.04em}
+.tr .stat .v{font-family:'Martian Mono',monospace;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.tr .key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border:1px solid var(--line);border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;color:var(--faint)}
+.tr .go{flex:none;display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 12px 0 16px;border:0;border-radius:3px;background:var(--accent);color:var(--ink);font-size:14px;font-weight:600;letter-spacing:-0.01em;box-shadow:0 0 24px color-mix(in srgb,var(--accent) 30%,transparent)}
+.tr .go:hover{filter:brightness(1.07)}
+.tr .go .key{border-color:color-mix(in srgb,var(--ink) 35%,transparent);color:var(--ink);background:transparent}
+.tr .gh{flex:none;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:0;border-radius:3px;background:transparent;color:var(--muted);font-size:13.5px;font-weight:500}
+.tr .gh:hover{background:var(--raise);color:var(--text)}
+.tr .badbtn{flex:none;display:inline-flex;align-items:center;gap:10px;height:34px;padding:0 10px 0 14px;border:1px solid var(--bad);border-radius:3px;background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad);font-size:14px;font-weight:600}
+.tr .badbtn:hover{background:color-mix(in srgb,var(--bad) 22%,transparent)}
+.tr .badbtn .key{border-color:color-mix(in srgb,var(--bad) 45%,transparent);color:var(--bad)}
+.tr .txt{padding:0;border:0;background:transparent;color:var(--accent);font-family:'Martian Mono',monospace;font-size:10.5px;text-decoration:underline;text-underline-offset:4px}
+.tr .reveal{padding:0;border:0;background:transparent;color:var(--accent);font-family:'Martian Mono',monospace;font-size:10.5px;text-decoration:underline;text-underline-offset:4px}
+
+.tr .sugg{position:absolute;top:50px;left:122px;width:340px;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--accent);border-radius:0 0 4px 4px;box-shadow:0 24px 50px rgba(0,0,0,.6);z-index:6;overflow:hidden}
+.tr .opt{display:grid;grid-template-columns:minmax(0,1fr) 84px 26px;align-items:center;gap:12px;width:100%;height:36px;padding:0 14px;border:0;background:transparent;color:var(--text);text-align:left}
+.tr .opt:hover,.tr .opt.on{background:var(--raise)}
+.tr .opt .tn{font-family:'Martian Mono',monospace;font-size:12px;color:var(--muted)}
+.tr .opt .tn b{color:var(--accent);font-weight:500}
+.tr .meter{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.tr .meter i{display:block;height:100%;background:var(--accent)}
+.tr .opt .c{font-family:'Martian Mono',monospace;font-size:10px;color:var(--faint);text-align:right}
+
+.tr .mbar{display:flex;align-items:center;gap:12px;height:58px;padding:0 12px 0 12px;border-bottom:1px solid var(--accent);background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--accent) 6%,transparent) 0 6px,transparent 6px 12px)}
+.tr .slip{position:absolute;left:0;top:0;width:290px;box-sizing:border-box;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:3px;box-shadow:0 14px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:8px}
+.tr .slip .l{font-size:15px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tr .slip .l.mono{font-family:'Martian Mono',monospace;font-size:11.5px;font-weight:400}
+
+.tr .strip{position:absolute;left:0;right:0;margin:0 auto;bottom:16px;width:540px;height:52px;display:flex;align-items:center;gap:12px;padding:0 8px 0 16px;box-sizing:border-box;background:var(--raise);border:1px solid var(--line);border-radius:4px;box-shadow:0 18px 44px rgba(0,0,0,.6);overflow:hidden;z-index:5}
+.tr .strip .bar{position:absolute;left:0;top:0;height:2px;background:var(--accent);box-shadow:0 0 8px var(--accent);transition:width 1s linear}
+.tr .strip.err{border-color:color-mix(in srgb,var(--bad) 55%,transparent);background:color-mix(in srgb,var(--bad) 8%,var(--raise))}
+.tr .strip.err .bar{width:100%;background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.tr .undo{flex:none;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:0;border-radius:3px;background:transparent;color:var(--accent);font-size:14px;font-weight:600}
+.tr .undo:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.tr .undo .key{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+
+.tr .pband{margin:12px 14px 6px 14px;padding:12px 10px 12px 14px;display:flex;align-items:center;gap:12px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:4px;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,transparent) 0 6px,transparent 6px 12px)}
+.tr .resume{flex:none;display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:0;border-radius:3px;background:var(--accent);color:var(--ink);font-size:13px;font-weight:600}
+
+.tr .scrim{position:absolute;inset:0;background:rgba(8,7,5,.76);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:10}
+.tr .dlg{width:460px;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--accent);border-radius:4px;box-shadow:0 30px 80px rgba(0,0,0,.65);padding:22px 24px 20px;display:flex;flex-direction:column;gap:18px}
+.tr .spec{position:relative;padding:14px 16px;background:var(--bg);border:1px solid var(--line);font-size:15.5px;font-weight:500;line-height:1.4;overflow:hidden}
+.tr .spec .sweep{position:absolute;inset:0;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--accent) 60%,var(--bg)) 0 2px,var(--bg) 2px 6px);animation:sweep 3s cubic-bezier(.6,0,.2,1) infinite}
+.tr .fact{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted)}
+.tr .fact svg{color:var(--accent);flex:none}
+@media (prefers-reduced-motion: reduce){.tr *{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div class="tr" style="--accent: {{accent}}; width: 880px; height: 580px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative">
+
+<sc-if value="{{notMulti}}" hint-placeholder-val="{{true}}">
+<header style="display: flex; align-items: center; gap: 16px; height: 58px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--line)">
+<span class="{{wmClass}}" aria-label="Cliptrace">clip<span class="t2" style="color: var(--accent)">trace</span></span>
+<sc-if value="{{paused}}" hint-placeholder-val="{{false}}"><span class="pz"><svg aria-hidden="true" width="8" height="9" viewBox="0 0 8 9" fill="currentColor"><rect x="0" y="0" width="2.5" height="9"></rect><rect x="5.5" y="0" width="2.5" height="9"></rect></svg>paused</span></sc-if>
+<span aria-hidden="true" style="width: 1px; height: 22px; background: var(--line)"></span>
+<label for="tr-search" class="sr">Search clips</label>
+<input id="tr-search" type="search" placeholder="Search the trace…  #tag, last week" value="{{q}}" onChange="{{onSearch}}" aria-autocomplete="list" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 16px; font-weight: 400; letter-spacing: -0.01em; color: var(--text); outline: none">
+<div role="group" aria-label="Show" class="seg">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="2">
+<button type="button" class="{{f.cls}}" aria-pressed="{{f.pressed}}" onClick="{{f.pick}}"><span class="{{f.markClass}}" aria-hidden="true"></span>{{f.label}}<span class="c">{{f.count}}</span></button>
+</sc-for>
+</div>
+<a class="ico" href="{{compactHref}}" aria-label="Collapse to quick paste" title="Collapse to quick paste (Tab)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg></a>
+</header>
+</sc-if>
+
+<sc-if value="{{multi}}" hint-placeholder-val="{{false}}">
+<header class="mbar" aria-label="Selection">
+<button type="button" class="ico" aria-label="Exit selection" title="Done (Esc)" onClick="{{exitMulti}}"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+<span style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 22px; font-weight: 800; letter-spacing: -0.03em; color: var(--accent); font-variant-numeric: tabular-nums">{{nChecked}}</span>
+<span class="m" style="font-size: 10px; color: var(--muted)">selected of 109</span>
+</span>
+<button type="button" class="txt" onClick="{{selectAll}}" style="margin-left: 6px">select all</button>
+<button type="button" class="txt" onClick="{{selectNone}}" style="color: var(--faint)">none</button>
+<span style="flex: 1"></span>
+<button type="button" class="gh"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4M9 4h6l-1 5 3 3v2H7v-2l3-3z"></path></svg>Pin</button>
+<button type="button" class="gh"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l9 9-8 8z"></path><circle cx="7.5" cy="8.5" r="1"></circle></svg>Tag</button>
+<button type="button" class="badbtn" onClick="{{deleteChecked}}">Delete {{nChecked}}<span class="key">Del</span></button>
+</header>
+</sc-if>
+
+<div style="display: flex; flex: 1; min-height: 0">
+
+<nav aria-label="Clip history" class="scroll" style="width: 344px; flex: none; overflow-y: auto; border-right: 1px solid var(--line); padding-bottom: 12px">
+<sc-if value="{{paused}}" hint-placeholder-val="{{false}}">
+<div class="pband" role="status">
+<svg aria-hidden="true" width="12" height="14" viewBox="0 0 8 9" fill="currentColor" style="color: var(--accent); flex: none"><rect x="0" y="0" width="2.5" height="9"></rect><rect x="5.5" y="0" width="2.5" height="9"></rect></svg>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 14px; font-weight: 600">Capture paused</span>
+<span class="m" style="font-size: 9.5px; color: var(--muted)">since 10:50 · copies aren’t saved</span>
+</span>
+<button type="button" class="resume" onClick="{{resume}}">Resume</button>
+</div>
+</sc-if>
+<div class="day" aria-hidden="true" style="height: 14px"><span></span><span class="{{topSpClass}}"><span class="{{topLit}}"></span></span><span></span></div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+<sc-if value="{{r.isDay}}" hint-placeholder-val="{{false}}">
+<div class="day"><span></span><span class="sp" aria-hidden="true"><span class="{{r.litClass}}" style="transition-delay: {{r.delay}}"></span></span><span class="lbl">{{r.label}}</span></div>
+</sc-if>
+<sc-if value="{{r.isClip}}" hint-placeholder-val="{{true}}">
+<button type="button" class="{{r.rowClass}}" role="{{r.role}}" aria-checked="{{r.ariaChecked}}" aria-current="{{r.current}}" onClick="{{r.select}}">
+<span class="tm">{{r.clock}}</span>
+<span class="sp" aria-hidden="true"><span class="{{r.litClass}}" style="transition-delay: {{r.delay}}"></span><span class="{{r.nodeClass}}"><sc-if value="{{r.checked}}" hint-placeholder-val="{{false}}"><svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-6"></path></svg></sc-if></span></span>
+<span class="body">
+<sc-if value="{{r.isSecret}}" hint-placeholder-val="{{false}}"><span class="line" aria-label="Hidden secret"><span class="hatch" style="width: 150px"></span></span></sc-if>
+<sc-if value="{{r.notSecret}}" hint-placeholder-val="{{true}}"><span class="{{r.lineClass}}">{{r.line}}</span></sc-if>
+<span class="src">{{r.code}} · {{r.app}}<sc-for list="{{r.tagList}}" as="tg" hint-placeholder-count="0"><span class="tg">  #{{tg.t}}</span></sc-for><sc-if value="{{r.pinned}}" hint-placeholder-val="{{false}}"><span style="color: var(--accent)">  ◆ pinned</span></sc-if><sc-if value="{{r.isGone}}" hint-placeholder-val="{{false}}"><span style="color: var(--bad)">  deleted</span></sc-if></span>
+</span>
+</button>
+</sc-if>
+</sc-for>
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}">
+<div class="m" style="padding: 48px 24px 0 100px; font-size: 11px; color: var(--faint); line-height: 1.7">nothing on the trace<br>matches that.</div>
+</sc-if>
+</nav>
+
+<section aria-label="Selected clip" class="stage" style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+
+<sc-if value="{{multi}}" hint-placeholder-val="{{false}}">
+<span class="ghost" aria-hidden="true">{{nChecked}}</span>
+<div style="position: relative; flex: 1; display: flex; flex-direction: column; gap: 22px; padding: 30px 32px 24px">
+<span class="m" style="font-size: 10px; color: var(--accent)">bulk · {{nChecked}} clips</span>
+<div aria-hidden="true" style="position: relative; height: 196px">
+<sc-for list="{{slips}}" as="sl" hint-placeholder-count="3">
+<div class="slip" style="transform: {{sl.tf}}; z-index: {{sl.z}}">
+<span class="m" style="font-size: 9.5px; color: var(--faint)"><span style="color: var(--accent)">{{sl.code}}</span> · {{sl.app}} · {{sl.clock}}</span>
+<span class="{{sl.lcls}}">{{sl.line}}</span>
+</div>
+</sc-for>
+</div>
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.03em">{{nCheckedLabel}}</h2>
+<div style="display: flex; align-items: center; gap: 14px">
+<button type="button" class="badbtn" onClick="{{deleteChecked}}">Delete {{nCheckedLabel}}<span class="key">Del</span></button>
+<span class="m" style="font-size: 9.5px; color: var(--faint); line-height: 1.7">click to toggle · shift-click<br>for a range · ctrl a for all</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showSingle}}" hint-placeholder-val="{{true}}">
+<span class="ghost" aria-hidden="true">{{cur.depth}}</span>
+<div class="scroll" style="position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 26px 32px 22px; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: flex; align-items: center; gap: 12px; margin: -8px -12px 0 0">
+<div class="meta" style="flex: 1; min-width: 0"><span class="a">{{cur.code}}</span><span>{{cur.app}}</span><span style="color: var(--line)">/</span><span style="overflow: hidden; text-overflow: ellipsis">{{cur.window}}</span></div>
+<div role="toolbar" aria-label="Clip actions" style="display: flex; gap: 2px; flex: none">
+<button type="button" class="{{copyClass}}" aria-label="Copy" title="Copy (Ctrl+C)" onClick="{{onCopy}}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.5"></rect><path d="M5 15V5a1 1 0 0 1 1-1h10"></path></svg></button>
+<button type="button" class="{{pinClass}}" aria-label="{{cur.pinLabel}}" aria-pressed="{{cur.pinPressed}}" title="{{cur.pinLabel}} (Ctrl+P)" onClick="{{onPin}}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4M9 4h6l-1 5 3 3v2H7v-2l3-3z"></path></svg></button>
+<button type="button" class="{{tagClass}}" aria-label="Add tag" title="Tag (Ctrl+T)" onClick="{{onTag}}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l9 9-8 8z"></path><circle cx="7.5" cy="8.5" r="1"></circle></svg></button>
+<button type="button" class="{{cur.secretClass}}" aria-label="Mark as secret" aria-pressed="{{cur.secretPressed}}" title="Secret (Ctrl+L)" onClick="{{askSecret}}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></button>
+<span aria-hidden="true" style="width: 1px; height: 16px; background: var(--line); align-self: center; margin: 0 4px"></span>
+<button type="button" class="ico danger" aria-label="Delete clip" title="Delete (Del)" onClick="{{deleteCur}}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+</div>
+</div>
+
+<sc-if value="{{cur.isText}}" hint-placeholder-val="{{true}}">
+<p class="big">{{cur.content}}</p>
+</sc-if>
+
+<sc-if value="{{cur.isLink}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span class="host">{{cur.host}}</span>
+<span class="m" style="font-size: 11.5px; color: var(--muted); word-break: break-all; line-height: 1.6">{{cur.content}}</span>
+<a class="m" href="{{cur.content}}" target="_blank" rel="noopener" style="font-size: 10.5px; align-self: flex-start; text-underline-offset: 4px">open in browser ↗</a>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isSecret}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 16px">
+<sc-if value="{{cur.hidden}}" hint-placeholder-val="{{true}}"><span aria-label="Hidden secret" style="display: flex; gap: 8px; padding: 6px 0"><span class="hatch" style="width: 70px; height: 26px"></span><span class="hatch" style="width: 104px; height: 26px"></span><span class="hatch" style="width: 44px; height: 26px"></span><span class="hatch" style="width: 86px; height: 26px"></span></span></sc-if>
+<sc-if value="{{cur.shown}}" hint-placeholder-val="{{false}}"><span class="m" style="font-size: 18px; letter-spacing: -0.02em; line-height: 1.5">{{cur.content}}</span></sc-if>
+<span style="display: flex; gap: 18px; align-items: baseline">
+<button type="button" class="reveal" onClick="{{toggleReveal}}">{{cur.revealLabel}}</button>
+<span class="m" style="font-size: 9.5px; color: var(--faint)">encrypted · kept out of search · self-clears in 25:00</span>
+</span>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isCode}}" hint-placeholder-val="{{false}}">
+<div class="code">
+<sc-for list="{{cur.lines}}" as="l" hint-placeholder-count="4"><span class="n">{{l.n}}</span><span class="t">{{l.t}}</span></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isImage}}" hint-placeholder-val="{{false}}">
+<div role="img" aria-label="Screenshot preview, 1280 by 720" style="position: relative; width: 340px; aspect-ratio: 16 / 9; background: var(--panel); display: flex; align-items: center; justify-content: center">
+<span class="crop" style="top: -6px; left: -6px; border-top-width: 1.5px; border-left-width: 1.5px"></span>
+<span class="crop" style="top: -6px; right: -6px; border-top-width: 1.5px; border-right-width: 1.5px"></span>
+<span class="crop" style="bottom: -6px; left: -6px; border-bottom-width: 1.5px; border-left-width: 1.5px"></span>
+<span class="crop" style="bottom: -6px; right: -6px; border-bottom-width: 1.5px; border-right-width: 1.5px"></span>
+<span class="m" style="font-size: 10px; color: var(--faint)">1280 × 720</span>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center">
+<button type="button" class="go">Copy<span class="key">↵</span></button>
+<span aria-hidden="true" style="width: 1px; height: 16px; background: var(--line); margin: 0 2px"></span>
+<sc-for list="{{cur.tagItems}}" as="tg" hint-placeholder-count="1">
+<button type="button" class="tagx" aria-label="Remove tag {{tg.t}}" onClick="{{tg.remove}}">#{{tg.t}}<span class="x" aria-hidden="true">×</span></button>
+</sc-for>
+<button type="button" class="addt" onClick="{{onTag}}">+ tag</button>
+</div>
+
+<div style="margin-top: auto; display: flex; padding-top: 16px; border-top: 1px solid var(--line)">
+<sc-for list="{{cur.stats}}" as="d" hint-placeholder-count="4">
+<div class="stat"><span class="k">{{d.k}}</span><span class="v">{{d.v}}</span></div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{noCur}}" hint-placeholder-val="{{false}}">
+<div class="m" style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--faint)">pick a point on the trace</div>
+</sc-if>
+</section>
+</div>
+
+<sc-if value="{{showSugg}}" hint-placeholder-val="{{false}}">
+<div class="sugg" role="listbox" aria-label="Tag suggestions">
+<div class="m" style="display: flex; justify-content: space-between; padding: 10px 14px 6px; font-size: 9.5px; color: var(--faint)"><span>tags</span><span>clips</span></div>
+<sc-for list="{{sugg}}" as="t" hint-placeholder-count="5">
+<button type="button" role="option" aria-selected="{{t.ariaSel}}" class="{{t.cls}}" onClick="{{t.pick}}"><span class="tn">#<b>{{t.pre}}</b>{{t.rest}}</span><span class="meter" aria-hidden="true"><i style="width: {{t.w}}"></i></span><span class="c">{{t.n}}</span></button>
+</sc-for>
+<sc-if value="{{hasNewTag}}" hint-placeholder-val="{{false}}">
+<div class="opt" style="color: var(--muted); font-size: 13px; cursor: default"><span class="m" style="font-size: 11px">+ new tag <span style="color: var(--accent)">#{{newTag}}</span></span><span></span><span></span></div>
+</sc-if>
+<div class="m" style="display: flex; gap: 14px; align-items: center; padding: 10px 14px; margin-top: 4px; border-top: 1px solid var(--line); font-size: 9.5px; color: var(--faint)">
+<span style="display: inline-flex; gap: 6px; align-items: center"><span class="key">↑↓</span>choose</span>
+<span style="display: inline-flex; gap: 6px; align-items: center"><span class="key">Tab</span>complete</span>
+<span style="display: inline-flex; gap: 6px; align-items: center"><span class="key">Esc</span>close</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{hasPending}}" hint-placeholder-val="{{false}}">
+<div class="strip" role="status" aria-live="polite">
+<span class="bar" style="width: {{pendingPct}}"></span>
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted); flex: none"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>
+<span style="flex: 1; min-width: 0; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{pendingLabel}}</span>
+<span class="m" style="font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; width: 22px; text-align: right">{{pendingSecs}}s</span>
+<button type="button" class="undo" onClick="{{undo}}">Undo<span class="key">^Z</span></button>
+<button type="button" class="ico" aria-label="Dismiss" onClick="{{commitNow}}"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+</sc-if>
+
+<sc-if value="{{hasErr}}" hint-placeholder-val="{{false}}">
+<div class="strip err" role="alert">
+<span class="bar"></span>
+<svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="color: var(--bad); flex: none"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4.5M12 17.5v.01"></path></svg>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{errTitle}}</span>
+<span class="m" style="font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{errDetail}}</span>
+</span>
+<button type="button" class="undo" onClick="{{retry}}">Retry<span class="key">↵</span></button>
+<button type="button" class="ico" aria-label="Dismiss" onClick="{{dismissErr}}"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+</sc-if>
+
+<sc-if value="{{hasConfirm}}" hint-placeholder-val="{{false}}">
+<div class="scrim">
+<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="sec-title">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="m" style="font-size: 9.5px; color: var(--accent)">ctrl l · mark secret</span>
+<h2 id="sec-title" style="margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1">Lock this clip as a secret?</h2>
+</div>
+<div class="spec">
+<span>{{confirmText}}</span>
+<span class="sweep" aria-hidden="true"></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 9px">
+<span class="fact"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>Encrypted on this device</span>
+<span class="fact"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>Masked everywhere and left out of search</span>
+<span class="fact"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>Still pastes normally with Enter</span>
+</div>
+<div style="display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 7%, transparent); border-radius: 3px">
+<svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--bad); flex: none; margin-top: 1px"><path d="M12 3l9.5 17h-19z"></path><path d="M12 10v4.5M12 17.5v.01"></path></svg>
+<span style="font-size: 13px; line-height: 1.45; color: var(--text)">This is one-way. Once locked, the clip can’t be turned back into plain text.</span>
+</div>
+<div style="display: flex; justify-content: flex-end; gap: 8px">
+<button type="button" class="gh" onClick="{{cancelSecret}}">Cancel<span class="key">Esc</span></button>
+<button type="button" class="go" onClick="{{confirmSecret}}">Encrypt &amp; lock<span class="key">↵</span></button>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#FFB547","options":["#FFB547","#5EE6C8","#FF7AA2","#A9B8FF"]},"scene":{"editor":"enum","default":"none","options":["none","multiselect","tags","secret","undo","error","paused"]},"$preview":{"width":880,"height":580}}'>
+var CLIPS = [
+  { id: 1, type: 'text', app: 'outlook', window: 'Re: Q4 contract — Outlook', group: 'today', clock: '10:42', copiedAt: 'today 10:42', count: '1×', size: '134 chars', pinned: true, tags: ['work'],
+    content: 'Hi Maya, thanks for sending the contract over. Everything looks good on my side, and I\'ll return the signed copy by Friday. Best, Alex' },
+  { id: 2, type: 'link', app: 'chrome', window: 'Webhook signatures — Acme API', group: 'today', clock: '10:38', copiedAt: 'today 10:38', count: '2×', size: '45 chars', pinned: false, tags: ['dev'],
+    content: 'https://docs.acme.dev/api/webhooks/signatures' },
+  { id: 3, type: 'secret', app: 'chrome', window: 'API keys — Dashboard', group: 'today', clock: '10:31', copiedAt: 'today 10:31', count: '1×', size: '25 chars', pinned: false, tags: [],
+    content: 'live_key_3f9a2c71d8b04e56' },
+  { id: 4, type: 'text', app: 'slack', window: '#design-review', group: 'today', clock: '10:19', copiedAt: 'today 10:19', count: '2×', size: '51 chars', pinned: true, tags: ['meeting'],
+    content: 'Standup moved to 10:15. Bring the Q4 roadmap draft.' },
+  { id: 5, type: 'code', app: 'code', window: 'cart.ts — storefront', group: 'today', clock: '10:07', copiedAt: 'today 10:07', count: '1×', size: '3 lines · ts', pinned: false, tags: ['dev'],
+    content: 'export function cartTotal(items: Item[]): number {\n  return items.reduce((sum, i) => sum + i.price * i.qty, 0);\n}' },
+  { id: 6, type: 'text', app: 'chrome', window: 'Track your parcel', group: 'today', clock: '09:55', copiedAt: 'today 09:55', count: '1×', size: '30 chars', pinned: false, tags: [],
+    content: 'Tracking number 7421 0985 3367' },
+  { id: 7, type: 'text', app: 'notepad', window: 'Addresses', group: 'today', clock: '09:12', copiedAt: 'today 09:12', count: '6×', size: '33 chars', pinned: true, tags: ['home'],
+    content: '221B Baker Street, London NW1 6XE' },
+  { id: 8, type: 'text', app: 'winword', window: 'Lease renewal.docx', group: 'yesterday', clock: '15:15', copiedAt: 'yesterday 15:15', count: '1×', size: '60 chars', pinned: false, tags: [],
+    content: 'Renewal notice must be given 60 days before the end of term.' },
+  { id: 9, type: 'text', app: 'outlook', window: 'Your flight confirmation — Outlook', group: 'yesterday', clock: '11:30', copiedAt: 'yesterday 11:30', count: '1×', size: '47 chars', pinned: false, tags: ['travel'],
+    content: 'Flight BA 117 departs at 21:40 from Terminal 5.' }
+];
+var CODE = { text: 'TXT', link: 'URL', secret: 'KEY', code: 'SRC', image: 'IMG' };
+var DAYS = [{ id: 'today', label: 'today' }, { id: 'yesterday', label: 'yesterday' }];
+var FILTERS = [{ id: 'all', label: 'all', count: '109' }, { id: 'pinned', label: 'pinned', count: '7' }];
+var TAGS = [{ t: 'dev', n: 14 }, { t: 'work', n: 12 }, { t: 'meeting', n: 9 }, { t: 'home', n: 6 }, { t: 'finance', n: 4 }, { t: 'travel', n: 3 }];
+var SCENE_FILES = { none: '', multiselect: 'MultiSelect', tags: 'TagSuggest', secret: 'SecretConfirm', undo: 'DeleteUndo', error: 'ErrorStrip', paused: 'CapturePaused' };
+var ERRORS = {
+  copy: { title: 'Couldn’t copy to the clipboard', detail: 'another app has the clipboard open · 0x800401D0' },
+  pin: { title: 'Couldn’t pin this clip', detail: 'history database is busy · SQLITE_BUSY' },
+  tag: { title: 'Couldn’t save the tag', detail: 'history database is busy · SQLITE_BUSY' }
+};
+var FAN = [
+  'translate(4px, 10px) rotate(-5deg)',
+  'translate(40px, 30px) rotate(1.5deg)',
+  'translate(76px, 14px) rotate(6deg)',
+  'translate(112px, 38px) rotate(-2deg)'
+];
+function pad(n) { return n < 10 ? '0' + n : String(n); }
+function shortLine(c) { var t = c.type === 'secret' ? 'secret' : c.content.replace(/^https?:\/\/(www\.)?/, '').split('\n')[0]; return t.length > 30 ? t.slice(0, 29) + '…' : t; }
+function initState(scene) {
+  var s = { q: '', filter: 'all', sel: 1, pins: {}, deleted: {}, tags: {}, secrets: {}, reveal: false, multi: false, checked: {}, pending: null, err: null, failing: false, confirm: null, paused: false };
+  if (scene === 'multiselect') { s.multi = true; s.checked = { 2: true, 4: true, 5: true }; }
+  if (scene === 'tags') { s.q = '#'; }
+  if (scene === 'secret') { s.sel = 4; s.confirm = 4; }
+  if (scene === 'undo') { s.pending = { ids: [2], label: 'Deleted “quo.com/pricing”', secs: 5, demo: true }; }
+  if (scene === 'error') { s.err = 'copy'; s.failing = true; }
+  if (scene === 'paused') { s.paused = true; }
+  return s;
+}
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = initState(props.scene || 'none');
+  }
+  componentDidMount() {
+    var self = this;
+    this.iv = setInterval(function () {
+      var p = self.state.pending;
+      if (!p) return;
+      var secs = p.secs - 1;
+      if (secs <= 0) {
+        if (p.demo) { secs = 5; } else { self.commit(p); return; }
+      }
+      self.setState({ pending: Object.assign({}, p, { secs: secs }) });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.iv); }
+  componentDidUpdate(prev) {
+    if (prev.scene !== this.props.scene) this.setState(initState(this.props.scene || 'none'));
+  }
+  commit(p) {
+    var d = Object.assign({}, this.state.deleted);
+    p.ids.forEach(function (id) { d[id] = true; });
+    this.setState({ deleted: d, pending: null });
+  }
+  renderVals() {
+    var self = this;
+    var s = this.state;
+    var scene = this.props.scene || 'none';
+    var q = (s.q || '').trim().toLowerCase();
+    var f = s.filter;
+    var pendingIds = s.pending ? s.pending.ids : [];
+    var all = CLIPS.filter(function (c) { return !s.deleted[c.id]; }).map(function (c) {
+      return Object.assign({}, c, {
+        type: s.secrets[c.id] ? 'secret' : c.type,
+        pinned: s.pins[c.id] !== undefined ? s.pins[c.id] : c.pinned,
+        tags: s.tags[c.id] || c.tags
+      });
+    });
+    var vis = all.filter(function (c) {
+      var okF = f === 'all' || c.pinned;
+      var hay = (c.type === 'secret' ? '' : c.content) + ' app:' + c.app + ' ' + c.window + ' ' + c.tags.map(function (t) { return '#' + t; }).join(' ');
+      return okF && (!q || hay.toLowerCase().indexOf(q) !== -1);
+    });
+    var live = vis.filter(function (c) { return pendingIds.indexOf(c.id) === -1; });
+    var selId = s.sel;
+    if (!live.some(function (c) { return c.id === selId; })) selId = live.length ? live[0].id : null;
+
+    function flags(c) {
+      return { isText: c.type === 'text', isLink: c.type === 'link', isSecret: c.type === 'secret', notSecret: c.type !== 'secret', isCode: c.type === 'code', isImage: c.type === 'image' };
+    }
+
+    var rows = [];
+    DAYS.forEach(function (d) {
+      var items = vis.filter(function (c) { return c.group === d.id; });
+      if (!items.length) return;
+      rows.push({ isDay: true, isClip: false, label: d.label });
+      items.forEach(function (c) { rows.push(Object.assign({ isDay: false, isClip: true }, c)); });
+    });
+    var selIdx = -1;
+    if (!s.multi) rows.forEach(function (r, i) { if (r.isClip && r.id === selId) selIdx = i; });
+    rows = rows.map(function (r, i) {
+      var before = selIdx >= 0 && i < selIdx;
+      var at = i === selIdx;
+      var out = Object.assign({}, r, {
+        litClass: 'lit' + (before ? ' full' : at ? ' half' : ''),
+        delay: (before || at) ? (i * 22) + 'ms' : '0ms'
+      });
+      if (!r.isClip) return out;
+      var c = r;
+      var gone = pendingIds.indexOf(c.id) !== -1;
+      var checked = !!s.checked[c.id];
+      var nodeClass, rowClass;
+      if (s.multi) {
+        nodeClass = 'node box' + (checked ? ' on' : '');
+        rowClass = 'row' + (checked ? ' chk' : '');
+      } else if (gone) {
+        nodeClass = 'node gone';
+        rowClass = 'row gone';
+      } else {
+        nodeClass = 'node' + (c.pinned ? ' pin' : '') + (before ? ' past' : '') + (at ? ' sel' : '');
+        rowClass = 'row' + (at ? ' sel' : '');
+      }
+      return Object.assign(out, flags(c), {
+        code: CODE[c.type],
+        rowClass: rowClass,
+        nodeClass: nodeClass,
+        checked: s.multi && checked,
+        isGone: gone,
+        role: s.multi ? 'checkbox' : null,
+        ariaChecked: s.multi ? (checked ? 'true' : 'false') : null,
+        current: !s.multi && at ? 'true' : null,
+        lineClass: 'line' + (c.type === 'code' || c.type === 'link' ? ' mono' : ''),
+        line: c.type === 'code' ? c.content.split('\n')[0] : c.content.replace(/^https?:\/\/(www\.)?/, ''),
+        tagList: c.tags.map(function (t) { return { t: t }; }),
+        select: function () {
+          if (gone) return;
+          if (self.state.multi) {
+            var ch = Object.assign({}, self.state.checked);
+            if (ch[c.id]) delete ch[c.id]; else ch[c.id] = true;
+            self.setState({ checked: ch });
+          } else {
+            self.setState({ sel: c.id, reveal: false });
+          }
+        }
+      });
+    });
+
+    var c = all.filter(function (x) { return x.id === selId; })[0];
+    var depth = 0;
+    live.some(function (x, i) { if (x.id === selId) { depth = i + 1; return true; } return false; });
+    var cur = { tagItems: [], stats: [], lines: [] };
+    if (c) {
+      cur = Object.assign({}, c, flags(c), {
+        code: CODE[c.type],
+        depth: pad(depth),
+        host: c.type === 'link' ? c.content.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] : '',
+        lines: c.content.split('\n').map(function (t, i) { return { n: String(i + 1), t: t }; }),
+        hidden: !s.reveal,
+        shown: !!s.reveal,
+        revealLabel: s.reveal ? 'hide' : 'hold to reveal',
+        pinLabel: c.pinned ? 'Unpin' : 'Pin',
+        pinPressed: c.pinned ? 'true' : 'false',
+        secretClass: 'ico' + (c.type === 'secret' ? ' on' : ''),
+        secretPressed: c.type === 'secret' ? 'true' : 'false',
+        tagItems: c.tags.map(function (t) {
+          return { t: t, remove: function () {
+            var next = Object.assign({}, self.state.tags);
+            next[c.id] = c.tags.filter(function (x) { return x !== t; });
+            self.setState({ tags: next });
+          } };
+        }),
+        stats: [
+          { k: 'COPIED', v: c.copiedAt },
+          { k: 'FROM', v: c.app + '.exe' },
+          { k: 'SIZE', v: c.size },
+          { k: 'USED', v: c.count }
+        ]
+      });
+    }
+
+    // multi-select
+    var checkedList = all.filter(function (x) { return s.checked[x.id]; });
+    var n = checkedList.length;
+    var slips = checkedList.slice(0, 4).map(function (x, i) {
+      return { code: CODE[x.type], app: x.app, clock: x.clock, line: x.type === 'secret' ? '•••••••••••• (secret)' : x.content.replace(/^https?:\/\/(www\.)?/, ''), lcls: 'l' + (x.type === 'code' || x.type === 'link' ? ' mono' : ''), tf: FAN[i], z: String(i + 1) };
+    });
+
+    // tag suggestions
+    var showSugg = !s.multi && s.q.charAt(0) === '#' && s.q.indexOf(' ') === -1;
+    var prefix = showSugg ? s.q.slice(1).toLowerCase() : '';
+    var matches = TAGS.filter(function (t) { return t.t.indexOf(prefix) === 0; });
+    var maxN = 14;
+    var sugg = matches.map(function (t, i) {
+      return {
+        pre: prefix, rest: t.t.slice(prefix.length), n: String(t.n), w: Math.round(t.n / maxN * 100) + '%',
+        cls: 'opt' + (i === 0 ? ' on' : ''), ariaSel: i === 0 ? 'true' : 'false',
+        pick: function () { self.setState({ q: '#' + t.t + ' ' }); }
+      };
+    });
+    var exact = TAGS.some(function (t) { return t.t === prefix; });
+
+    var err = s.err ? ERRORS[s.err] : null;
+    var confirmClip = s.confirm ? all.filter(function (x) { return x.id === s.confirm; })[0] : null;
+    var base = SCENE_FILES[scene] || '';
+
+    return {
+      accent: this.props.accent ?? '#FFB547',
+      compactHref: base + 'Compact.dc.html',
+      q: s.q,
+      onSearch: function (e) { self.setState({ q: e.target.value }); },
+      filters: FILTERS.map(function (x) {
+        return Object.assign({}, x, {
+          cls: 'flt' + (x.id === f ? ' on' : ''),
+          pressed: x.id === f ? 'true' : 'false',
+          markClass: x.id === 'pinned' ? 'dia' : 'dot',
+          pick: function () { self.setState({ filter: x.id }); }
+        });
+      }),
+      rows: rows,
+      empty: rows.length === 0,
+      multi: s.multi,
+      notMulti: !s.multi,
+      hasCur: !!c,
+      showSingle: !s.multi && !!c,
+      noCur: !s.multi && !c,
+      cur: cur,
+      paused: s.paused,
+      wmClass: 'wm' + (s.paused ? ' dim' : ''),
+      topSpClass: 'sp' + (s.paused ? ' dash' : ''),
+      topLit: s.paused || s.multi ? 'lit' : 'lit full',
+      resume: function () { self.setState({ paused: false }); },
+
+      nChecked: String(n),
+      nCheckedLabel: n === 1 ? '1 clip' : n + ' clips',
+      slips: slips,
+      exitMulti: function () { self.setState({ multi: false, checked: {} }); },
+      selectAll: function () { var ch = {}; live.forEach(function (x) { ch[x.id] = true; }); self.setState({ checked: ch }); },
+      selectNone: function () { self.setState({ checked: {} }); },
+      deleteChecked: function () {
+        var ids = Object.keys(self.state.checked).map(Number);
+        if (!ids.length) return;
+        self.setState({ multi: false, checked: {}, pending: { ids: ids, label: (ids.length === 1 ? '1 clip' : ids.length + ' clips') + ' deleted', secs: 5, demo: false } });
+      },
+
+      showSugg: showSugg,
+      sugg: sugg,
+      hasNewTag: !!prefix && !exact,
+      newTag: prefix,
+
+      hasPending: !!s.pending,
+      pendingLabel: s.pending ? s.pending.label : '',
+      pendingSecs: s.pending ? String(s.pending.secs) : '',
+      pendingPct: s.pending ? (s.pending.secs / 5 * 100) + '%' : '0%',
+      undo: function () { self.setState({ pending: null }); },
+      commitNow: function () { if (self.state.pending) self.commit(self.state.pending); },
+
+      hasErr: !!err,
+      errTitle: err ? err.title : '',
+      errDetail: err ? err.detail : '',
+      copyClass: 'ico' + (s.err === 'copy' ? ' fail' : ''),
+      pinClass: 'ico' + (s.err === 'pin' ? ' fail' : c && c.pinned ? ' on' : ''),
+      tagClass: 'ico' + (s.err === 'tag' ? ' fail' : ''),
+      retry: function () { self.setState({ err: null, failing: false }); },
+      dismissErr: function () { self.setState({ err: null }); },
+      onCopy: function () { if (self.state.failing) self.setState({ err: 'copy' }); },
+      onTag: function () { if (self.state.failing) self.setState({ err: 'tag' }); },
+      onPin: function () {
+        if (!c) return;
+        if (self.state.failing) { self.setState({ err: 'pin' }); return; }
+        var next = Object.assign({}, self.state.pins);
+        next[c.id] = !c.pinned;
+        self.setState({ pins: next });
+      },
+
+      hasConfirm: !!confirmClip,
+      confirmText: confirmClip ? (confirmClip.type === 'secret' ? 'Already a secret' : confirmClip.content.split('\n')[0]) : '',
+      askSecret: function () { if (c && c.type !== 'secret') self.setState({ confirm: c.id }); },
+      cancelSecret: function () { self.setState({ confirm: null }); },
+      confirmSecret: function () {
+        var sc = Object.assign({}, self.state.secrets);
+        sc[self.state.confirm] = true;
+        self.setState({ secrets: sc, sel: self.state.confirm, confirm: null, reveal: false });
+      },
+
+      toggleReveal: function () { self.setState({ reveal: !self.state.reveal }); },
+      deleteCur: function () {
+        if (!c) return;
+        self.setState({ pending: { ids: [c.id], label: 'Deleted “' + shortLine(c) + '”', secs: 5, demo: false }, reveal: false });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>
