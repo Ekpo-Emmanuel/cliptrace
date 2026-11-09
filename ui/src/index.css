@@ -465,7 +465,6 @@ input:focus-visible {
   border: 0;
   background: var(--accent);
   color: var(--ink);
-  box-shadow: var(--glow-button);
 }
 .btn-go .keycap {
   border-color: color-mix(in srgb, var(--ink) 35%, transparent);
@@ -506,15 +505,15 @@ input:focus-visible {
 }
 .txt-link {
   border: 0;
+  color: var(--faint);
   background: none;
-  color: var(--accent);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10.5px;
   text-underline-offset: 4px;
 }
 .txt-link:hover {
-  text-decoration: underline;
+  color: var(--accent);
 }
 
 /* ---- trace list ---- */
@@ -523,7 +522,6 @@ input:focus-visible {
   grid-template-columns: 58px 26px 1fr;
   height: 62px;
   cursor: pointer;
-
 }
 .trow:hover .tbody {
   background: var(--panel);
@@ -556,7 +554,9 @@ input:focus-visible {
   bottom: 0;
   left: 50%;
   width: 1px;
-  background: var(--line);
+  /* Darker than --line so the rail reads as one unbroken trace, also across
+     the pinned and recent section headers. */
+  background: color-mix(in srgb, var(--faint) 45%, var(--bg));
 }
 .tlit {
   position: absolute;
@@ -622,11 +622,7 @@ input:focus-visible {
 
 /* ---- preview ---- */
 .pv-grid {
-  background-image: radial-gradient(
-    circle,
-    var(--line) 1px,
-    transparent 1.3px
-  );
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.3px);
   background-size: 20px 20px;
   mask-image: linear-gradient(200deg, #000, transparent 70%);
   -webkit-mask-image: linear-gradient(200deg, #000, transparent 70%);
@@ -665,7 +661,7 @@ input:focus-visible {
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  color: var(--muted);
+  color: var(--text);
 }
 .tagchip:hover {
   color: var(--text);
@@ -690,6 +686,18 @@ input:focus-visible {
   background: var(--raise);
   box-shadow: var(--shadow-float);
   font-size: 14px;
+}
+/* Copy confirmation: centered pill above the key hints, no countdown bar. */
+.strip.ok {
+  width: auto;
+  min-width: 220px;
+  max-width: calc(100% - 24px);
+  height: 48px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  gap: 14px;
+  padding: 0 22px 0 16px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  font-weight: 600;
 }
 .strip.bad {
   border: 1px solid color-mix(in srgb, var(--bad) 55%, transparent);
@@ -897,6 +905,13 @@ input:focus-visible {
 }
 .tq .strip {
   bottom: 56px;
+}
+/* Quick paste: the copy toast spans the full width. */
+.tq .strip.ok {
+  left: 12px;
+  right: 12px;
+  max-width: none;
+  transform: none;
 }
 
 .tday.q {

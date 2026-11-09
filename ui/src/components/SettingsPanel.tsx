@@ -9,6 +9,7 @@ type Props = {
   onTheme: (theme: Theme) => void;
   onClose: () => void;
   onError: (message: string) => void;
+  onShowWelcome: () => void;
 };
 
 function Section({
@@ -182,6 +183,7 @@ export function SettingsPanel({
   onTheme,
   onClose,
   onError,
+  onShowWelcome,
 }: Props) {
   const [s, setS] = useState<Settings | null>(null);
   const [app, setApp] = useState("");
@@ -397,6 +399,15 @@ export function SettingsPanel({
                   >
                     {s.keyword_only ? "keyword-only" : "hybrid"}
                   </span>
+                </Row>
+                <Row title="Welcome screen" hint="The first-run intro.">
+                  <button
+                    type="button"
+                    className="btn-gh !h-8 !border-(--line)"
+                    onClick={onShowWelcome}
+                  >
+                    Show again
+                  </button>
                 </Row>
                 <div className="erow !block">
                   <p className="text-[14px] font-medium">Data folder</p>

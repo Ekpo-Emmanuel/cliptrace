@@ -139,6 +139,7 @@ export type Settings = {
   retention_days: number;
   blocklist: string[];
   autostart: boolean;
+  welcomed: boolean;
   data_dir: string;
   version: string;
 };
@@ -146,6 +147,11 @@ export type Settings = {
 export type SettingsPatch = Partial<
   Pick<
     Settings,
-    "paused" | "autostart" | "secret_ttl_hours" | "retention_days" | "blocklist"
+    | "paused"
+    | "autostart"
+    | "welcomed"
+    | "secret_ttl_hours"
+    | "retention_days"
+    | "blocklist"
   >
 >;

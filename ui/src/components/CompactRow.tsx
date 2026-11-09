@@ -1,4 +1,5 @@
 import type { ClipCard } from "../api";
+import { isMonoKind } from "../lib/kind";
 import { clock } from "../lib/time";
 
 type Props = {
@@ -22,7 +23,7 @@ export function CompactRow({
   onTogglePick,
 }: Props) {
   const secret = card.kind === "secret";
-  const mono = card.kind === "link" || card.kind === "code";
+  const mono = isMonoKind(card.kind);
   const lit = past || selected;
 
   let node = "tnode";

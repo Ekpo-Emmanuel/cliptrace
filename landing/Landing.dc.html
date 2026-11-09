@@ -8,6 +8,8 @@
       content="Free clipboard history for Windows 10 and 11. Unlike Win+V, which keeps 25 copies and clears them on restart, Cliptrace keeps everything you copy and lets you search it by meaning. Nothing leaves your PC."
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <script>
       /* Theme: the visitor's saved choice, else dark. The system setting is ignored. Set before the page renders to avoid a flash. */
       (function () {
@@ -1818,13 +1820,22 @@
               href="#top"
               aria-label="Cliptrace home"
               style="
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
                 font-weight: 800;
                 font-size: 22px;
                 letter-spacing: -0.03em;
                 color: var(--text);
                 text-decoration: none;
               "
-              >clip<span style="color: var(--accent)">trace</span></a
+              ><img
+                src="/favicon.svg"
+                alt=""
+                width="30"
+                height="30"
+                style="display: block; border-radius: 7px"
+              /><span>clip<span style="color: var(--accent)">trace</span></span></a
             >
             <div
               class="links"

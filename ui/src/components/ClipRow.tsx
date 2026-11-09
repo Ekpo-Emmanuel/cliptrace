@@ -1,5 +1,5 @@
 import type { ClipCard } from "../api";
-import { kindMark } from "../lib/kind";
+import { isMonoKind, kindMark } from "../lib/kind";
 import { clock } from "../lib/time";
 
 type Props = {
@@ -28,7 +28,7 @@ export function ClipRow({
   onTogglePick,
 }: Props) {
   const secret = card.kind === "secret";
-  const mono = card.kind === "link" || card.kind === "code";
+  const mono = isMonoKind(card.kind);
   const { code } = kindMark(card.kind);
   const tags = card.tags.slice(0, 2);
   const extra = card.tags.length - tags.length;

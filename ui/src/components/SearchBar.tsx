@@ -59,11 +59,9 @@ export function SearchBar({
         </label>
         <input
           id="q"
-          className="min-w-0 flex-1 border-0 bg-transparent text-[16px] tracking-[-0.01em] outline-none ring-0 focus:outline-none focus-visible:outline-none placeholder:text-(--faint)"
+          className="min-w-0 flex-1 placeholder:text-[13px] border-0 bg-transparent text-[16px] tracking-[-0.01em] outline-none ring-0 focus:outline-none focus-visible:outline-none placeholder:text-(--faint)"
           style={{ color: "var(--text)" }}
-          placeholder={
-            compact ? "Search…" : "Search the trace…  #tag, last week"
-          }
+          placeholder="Search the trace…  #tag, last week"
           value={value}
           autoComplete="off"
           spellCheck={false}
@@ -84,30 +82,32 @@ export function SearchBar({
           </button>
         ) : null}
         {compact ? null : trailing}
-        <button
-          type="button"
-          className="btn-ico shrink-0"
-          aria-label="Settings"
-          title="Settings  Ctrl ,"
-          onClick={onSettings}
-        >
-          <IconSettings className="h-[17px] w-[17px]" />
-        </button>
-        <button
-          type="button"
-          className="btn-ico shrink-0"
-          aria-label={
-            compact ? "Expand to full view" : "Collapse to quick paste"
-          }
-          title={compact ? "Expand (Tab)" : "Quick paste (Tab)"}
-          onClick={onToggleMode}
-        >
-          {compact ? (
-            <IconExpand className="h-[17px] w-[17px]" />
-          ) : (
-            <IconCollapse className="h-[17px] w-[17px]" />
-          )}
-        </button>
+        <div className="space-x-2">
+          <button
+            type="button"
+            className="btn-ico shrink-0"
+            aria-label="Settings"
+            title="Settings  Ctrl ,"
+            onClick={onSettings}
+          >
+            <IconSettings className="h-[17px] w-[17px]" />
+          </button>
+          <button
+            type="button"
+            className="btn-ico shrink-0"
+            aria-label={
+              compact ? "Expand to full view" : "Collapse to quick paste"
+            }
+            title={compact ? "Expand (Tab)" : "Quick paste (Tab)"}
+            onClick={onToggleMode}
+          >
+            {compact ? (
+              <IconExpand className="h-[17px] w-[17px]" />
+            ) : (
+              <IconCollapse className="h-[17px] w-[17px]" />
+            )}
+          </button>
+        </div>
       </div>
       {suggest.length > 0 ? (
         <ul

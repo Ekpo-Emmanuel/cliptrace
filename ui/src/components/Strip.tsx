@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { IconClose, IconTrash } from "../icons";
+import { IconCheck, IconClose, IconTrash } from "../icons";
 
 type UndoProps = {
   onUndo: () => void;
@@ -35,6 +35,18 @@ export function UndoStrip({ onUndo, onDismiss }: UndoProps) {
       >
         <IconClose className="h-3.5 w-3.5" />
       </button>
+    </div>
+  );
+}
+
+/** Short confirmation shown after a copy. Dismisses itself via the parent timer. */
+export function CopiedStrip() {
+  return (
+    <div className="strip ok" role="status" aria-live="polite">
+      <IconCheck className="h-4 w-4 shrink-0" style={{ color: "var(--accent)" }} />
+      <span className="min-w-0 flex-1 truncate font-medium">
+        Copied to clipboard
+      </span>
     </div>
   );
 }
