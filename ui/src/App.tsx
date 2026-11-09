@@ -22,7 +22,7 @@ import {
   useEffectiveTheme,
   type Theme,
 } from "./lib/theme";
-import { ErrorStrip, UndoStrip } from "./components/Strip";
+import { CopiedStrip, ErrorStrip, UndoStrip } from "./components/Strip";
 
 type Tab = "recent" | "pinned";
 
@@ -244,7 +244,7 @@ export default function App() {
   function flashCopied() {
     setCopied(true);
     window.clearTimeout(copiedTimer.current);
-    copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
+    copiedTimer.current = window.setTimeout(() => setCopied(false), 1800);
   }
 
   async function copy(id?: number, hideAfter = false) {
@@ -255,7 +255,8 @@ export default function App() {
       await apiRef.current?.copyClip(card.id);
       flashCopied();
       if (hideAfter) {
-        window.setTimeout(() => void hideNow(), 280);
+        // Long enough for the "Copied to clipboard" toast to be seen.
+        window.setTimeout(() => void hideNow(), 700);
       }
     } catch (err) {
       setErrToast(err instanceof Error ? err.message : "Copy failed");
@@ -770,6 +771,7 @@ export default function App() {
           onDismiss={() => setUndoId(null)}
         />
       ) : null}
+      {copied && !errToast && undoId == null ? <CopiedStrip /> : null}
       {errToast ? (
         <ErrorStrip message={errToast} onDismiss={() => setErrToast(null)} />
       ) : null}
