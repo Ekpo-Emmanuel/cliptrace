@@ -463,13 +463,13 @@ fn notify_hotkey_failed(app: &AppHandle, hotkey: &str) {
 }
 
 /// On the first launch after install the app would otherwise sit silently in the tray, so open
-/// the popup once; the UI shows the welcome screen while `welcomed` is false.
+/// the popup once; the UI shows the welcome screen while `welcome_seen` is false.
 fn open_welcome_on_first_run(app: AppHandle) {
     std::thread::spawn(move || {
         let pending = cliptrace_core::Paths::resolve()
             .ok()
             .and_then(|paths| load_or_create(&paths).ok())
-            .is_some_and(|config| !config.welcomed);
+            .is_some_and(|config| !config.welcome_seen);
         if !pending {
             return;
         }
@@ -859,7 +859,7 @@ fn settings_dto(state: &AppState, config: &cliptrace_core::Config, data_dir: &st
         retention_days: config.retention_days,
         blocklist: config.blocklist.clone(),
         autostart: cliptrace_core::is_autostart_enabled(),
-        welcomed: config.welcomed,
+        welcomed: config.welcome_seen,
         data_dir: data_dir.to_string_lossy().into_owned(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     }
@@ -919,7 +919,7 @@ fn update_settings(
         config.autostart = enabled;
     }
     if let Some(done) = patch.welcomed {
-        config.welcomed = done;
+        config.welcome_seen = done;
     }
     cliptrace_core::save(&paths, &config).map_err(|e| e.to_string())?;
 
