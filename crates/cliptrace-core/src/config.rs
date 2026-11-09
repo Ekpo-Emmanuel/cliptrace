@@ -33,14 +33,12 @@ pub struct Config {
     /// Launch at Windows sign-in (HKCU Run). Mirrors the registry value we set.
     #[serde(default)]
     pub autostart: bool,
-    /// Whether the first-run welcome screen has been dismissed. A config file written before
-    /// this field existed counts as welcomed, so upgrading users are not greeted again.
-    #[serde(default = "default_welcomed")]
-    pub welcomed: bool,
-}
-
-fn default_welcomed() -> bool {
-    true
+    /// Whether the welcome screen has been dismissed. A config file without this key, such as
+    /// one from before the welcome screen existed, has not seen it yet, so an upgrading user
+    /// sees it once too. The key was `welcomed` in 0.4.0, which defaulted to true for old files
+    /// and so hid the screen from them; that key is now ignored.
+    #[serde(default)]
+    pub welcome_seen: bool,
 }
 
 fn default_secret_ttl_hours() -> u32 {
@@ -64,7 +62,7 @@ impl Default for Config {
             onnxruntime_path: String::new(),
             hotkey: default_hotkey(),
             autostart: false,
-            welcomed: false,
+            welcome_seen: false,
         }
     }
 }
@@ -192,19 +190,27 @@ mod tests {
     }
 
     #[test]
-    fn a_new_install_is_not_welcomed_but_an_older_config_file_is() {
-        assert!(!Config::default().welcomed);
+    fn the_welcome_is_pending_for_new_installs_and_for_older_config_files() {
+        assert!(!Config::default().welcome_seen);
         let old: Config = toml::from_str("retention_days = 30\n").unwrap();
-        assert!(old.welcomed);
+        assert!(!old.welcome_seen);
+    }
+
+    #[test]
+    fn the_0_4_0_welcomed_key_does_not_hide_the_welcome() {
+        let old: Config = toml::from_str("welcomed = true\nretention_days = 30\n").unwrap();
+        assert!(!old.welcome_seen);
+        let seen: Config = toml::from_str("welcome_seen = true\n").unwrap();
+        assert!(seen.welcome_seen);
     }
 
     #[test]
     fn a_fresh_config_file_records_that_the_welcome_is_pending() {
         let paths = paths_in("welcome");
         let created = load_or_create(&paths).unwrap();
-        assert!(!created.welcomed);
+        assert!(!created.welcome_seen);
         let reread = load_or_create(&paths).unwrap();
-        assert!(!reread.welcomed);
+        assert!(!reread.welcome_seen);
         let _ = fs::remove_dir_all(&paths.data_dir);
     }
 }
