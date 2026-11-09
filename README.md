@@ -4,6 +4,15 @@ A clipboard history for Windows that lives on your PC and searches by meaning. E
 
 Nothing leaves your PC. The only network call is a one-time download of the search model on first run.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/full-dark.png">
+    <img src="docs/images/full-light.png" alt="Cliptrace full view: recent copies on a trace on the left, a large preview of the selected clip on the right" width="880">
+  </picture>
+</p>
+
+<p align="center"><sub>The full view. Sample clips shown.</sub></p>
+
 ## Features
 
 - Captures every text copy, with the source app and window title.
@@ -31,6 +40,15 @@ Requirements: Windows 10 or 11 with WebView2 (included in Windows 11).
 ## Using it
 
 Cliptrace runs in the system tray. Press `Ctrl+Alt+V` from any app to open the popup, type to search, and press `Enter` to copy the selected clip. Clicking a clip copies it too. In Quick paste the popup then closes. In full view it stays open.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/quick-paste-dark.png">
+    <img src="docs/images/quick-paste-light.png" alt="Cliptrace Quick paste: a narrow list with pinned clips first, then recent clips" width="380">
+  </picture>
+</p>
+
+<p align="center"><sub>Quick paste, opened with <code>Tab</code>. Pinned clips come first.</sub></p>
 
 Search tips:
 
@@ -63,6 +81,10 @@ Search tips:
 ### Settings
 
 Open Settings with the gear button or `Ctrl+,`.
+
+<p align="center">
+  <img src="docs/images/settings.png" alt="Cliptrace settings panel: theme, pause capture, launch at sign-in, secret and history retention" width="720">
+</p>
 
 - **Theme:** system, light or dark.
 - **Pause capture:** stop saving copies until you turn it back on.
@@ -153,6 +175,7 @@ Run it with no arguments to see all commands, including `pin`, `tag`, `copy`, `p
 - `src-tauri`: the tray, hotkey, popup window and Tauri commands.
 - `ui/`: the React, TypeScript and Tailwind interface.
 - `design/v2/`: the design reference and screens.
+- `landing/`: the landing page, a static site deployed on Vercel with the project's root directory set to `landing`.
 - `SPEC.md`: architecture, schema and milestones.
 
 ## License
