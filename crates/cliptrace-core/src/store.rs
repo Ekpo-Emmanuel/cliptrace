@@ -1100,7 +1100,7 @@ fn browse_clause(filter: &BrowseFilter) -> String {
     for _ in &filter.tags {
         extra.push_str(
             " AND EXISTS (SELECT 1 FROM clip_tags ct JOIN tags t ON t.id = ct.tag_id \
-             WHERE ct.clip_id = c.id AND t.name LIKE '%' || ? || '%' COLLATE NOCASE)",
+             WHERE ct.clip_id = c.id AND t.name COLLATE NOCASE = ?)",
         );
     }
     extra
@@ -1743,6 +1743,45 @@ VALUES ('abc', 1, 1, 1, 'other', 0, 'hello sample', 'hello sample', 'notepad.exe
         store.delete_clip(id).unwrap();
         assert_key_absent_on_disk(&store, key);
         drop(store);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn browse_tag_filter_matches_exactly() {
+        let (dir, store) = temp_db();
+        let ins = store.upsert_clip(&clip("homework notes"), 1_000, 24).unwrap();
+        let UpsertOutcome::Inserted { id: homework } = ins else { panic!("ins") };
+        store.tag_clip(homework, "homework").unwrap();
+        let ins2 = store.upsert_clip(&clip("standup notes"), 2_000, 24).unwrap();
+        let UpsertOutcome::Inserted { id: work } = ins2 else { panic!("ins2") };
+        store.tag_clip(work, "work").unwrap();
+
+        // `#work` must not return clips tagged `homework`.
+        let filter = BrowseFilter {
+            tags: vec!["work".to_string()],
+            ..Default::default()
+        };
+        let hits = store.list_recent(0, 10, &filter).unwrap();
+        assert_eq!(hits.len(), 1, "substring match leaked homework into #work");
+        assert_eq!(hits[0].id, work);
+
+        // Exact matching is still case-insensitive.
+        let filter = BrowseFilter {
+            tags: vec!["WORK".to_string()],
+            ..Default::default()
+        };
+        let hits = store.list_recent(0, 10, &filter).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, work);
+
+        let filter = BrowseFilter {
+            tags: vec!["homework".to_string()],
+            ..Default::default()
+        };
+        let hits = store.list_recent(0, 10, &filter).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, homework);
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
