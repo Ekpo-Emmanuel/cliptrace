@@ -19,3 +19,6 @@ tauri-run.log
 # ONNX Runtime files bundled into the installer (copy from the data dir or download)
 /src-tauri/runtime/
 installer-build.log
+
+# Private local notes. Never commit.
+docs/private/

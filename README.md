@@ -4,6 +4,10 @@
 
 # Cliptrace
 
+[![CI](https://github.com/Ekpo-Emmanuel/cliptrace/actions/workflows/ci.yml/badge.svg)](https://github.com/Ekpo-Emmanuel/cliptrace/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/Ekpo-Emmanuel/cliptrace)](https://github.com/Ekpo-Emmanuel/cliptrace/releases/latest)
+
 A clipboard history for Windows that lives on your PC and searches by meaning. Every text you copy is saved and indexed on your machine, so you can type "that Stripe key thing from Tuesday" and get it back.
 
 Nothing leaves your PC. The only network call is a one-time download of the search model on first run.
@@ -118,6 +122,62 @@ Cliptrace looks for `onnxruntime.dll` in the path set in `config.toml`, then nex
 - Logs never contain clip content.
 - Clipboard exclusion formats and the ignored-apps list are checked before any text is read.
 - Raw secret values are never stored in plain text, in the search index, or in the vector index. The UI shows masked previews only.
+- Ordinary clips are stored as plain text in the database. Only detected or manually marked secrets are encrypted, so treat `cliptrace.db` as private.
+
+## How it works
+
+Cliptrace is one Windows process: a Rust core library, a small Tauri shell (tray, global hotkey, popup window), and a React and TypeScript interface that talks to Rust through typed commands. There is no server and no account.
+
+```mermaid
+flowchart LR
+  A["Copy in any app"] --> B["Capture<br/>pause, ignored apps, exclusion formats"]
+  B --> C[("SQLite + FTS5<br/>secrets encrypted with DPAPI")]
+  B --> D["Embed in the background<br/>bge-small on ONNX Runtime"]
+  D --> C
+  E["Ctrl+Alt+V, type a query"] --> F["Parse #tags and time phrases"]
+  F --> G["Keyword search (FTS5, BM25)<br/>+ vector search"]
+  C --> G
+  G --> H["Merge with rank fusion"]
+  H --> I["Results, secrets masked"]
+```
+
+- **Capture** listens for clipboard changes with a hidden Win32 window, without polling. Pause and the ignored-apps list are checked before the clipboard is opened, and the clipboard exclusion formats that password managers set are checked before any text is read.
+- **Search** splits a query into `#tags`, a time phrase (`last week`) and the remaining words. Those words go to SQLite FTS5 with BM25 ranking and, as a 384-dimension vector from the `bge-small-en-v1.5` model, to a similarity search. Reciprocal Rank Fusion (k = 60) merges the two rankings. If the model is unavailable, search falls back to keywords only.
+- **Secrets** are detected by known key formats and an entropy rule. A matching clip is encrypted with Windows DPAPI, stored with no plain text, and indexed only by a context sentence such as `stripe key copied from chrome.exe`.
+
+The full technical documentation, with sequence diagrams, the database schema, design decisions and known weaknesses, is in [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md).
+
+## Performance
+
+Search was measured on synthetic data with a script you can run yourself:
+
+```bash
+cargo run --release -p cliptrace-core --example bench_search
+```
+
+Hybrid search (keyword, vector and rank fusion) over a growing history, from three runs on one Windows PC:
+
+| Stored clips | Hybrid search |
+|---|---|
+| 1,000 | about 20 to 30 ms |
+| 10,000 | about 190 to 250 ms |
+| 50,000 | about 0.9 to 1.0 s |
+| 100,000 | about 1.8 to 3.6 s |
+
+The vector search is a brute-force scan, so its cost grows in proportion to the number of clips. Typical clipboard histories are far smaller than 100,000 items, but this is the main scaling limit and [issue #6](https://github.com/Ekpo-Emmanuel/cliptrace/issues/6) tracks the fix. The numbers vary by 30 to 50% between runs, use made-up text with a small vocabulary (so keyword numbers are pessimistic), and leave out the time to embed the query with the model.
+
+## Known limitations and roadmap
+
+Cliptrace handles text only: no images or files. The search model is English, and the app is Windows only and not yet code signed. These are the engineering issues I know about, with evidence in each:
+
+- [#5](https://github.com/Ekpo-Emmanuel/cliptrace/issues/5) Tagging a clip deletes its vector and the desktop app never recomputes it (bug)
+- [#6](https://github.com/Ekpo-Emmanuel/cliptrace/issues/6) Vector search reads every embedding and each clip's full text per query
+- [#7](https://github.com/Ekpo-Emmanuel/cliptrace/issues/7) Reuse one database connection instead of reopening it for every command
+- [#8](https://github.com/Ekpo-Emmanuel/cliptrace/issues/8) Deleting a clip rebuilds the whole full-text index and runs `VACUUM`
+- [#9](https://github.com/Ekpo-Emmanuel/cliptrace/issues/9) The code assumes WAL mode but never enables it
+- [#10](https://github.com/Ekpo-Emmanuel/cliptrace/issues/10) Add UI tests
+- [#11](https://github.com/Ekpo-Emmanuel/cliptrace/issues/11) An unsalted SHA-256 of the text is stored, including for secrets
+- [#12](https://github.com/Ekpo-Emmanuel/cliptrace/issues/12) The `#tag` filter matches by substring (bug)
 
 ## Build from source
 
@@ -180,7 +240,14 @@ Run it with no arguments to see all commands, including `pin`, `tag`, `copy`, `p
 - `ui/`: the React, TypeScript and Tailwind interface.
 - `design/v2/`: the design reference and screens.
 - `landing/`: the landing page, a static site deployed on Vercel with the project's root directory set to `landing`.
-- `SPEC.md`: architecture, schema and milestones.
+- `docs/`: [PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md), the code signing plan, and README images.
+- `branding/`: the logo and the script that renders the app icons.
+- `.github/workflows/`: `ci.yml` (tests and UI build on every pull request) and `release.yml` (manual release build, prepared for code signing).
+- `SPEC.md`: the original design spec and milestones. It is partly out of date; the code and `docs/PROJECT_DOCUMENTATION.md` describe the current behavior.
+
+## How this was built
+
+Cliptrace was built with AI coding assistants (Cursor and Claude Code). The author set the requirements, tested the builds on real Windows PCs and decided what to ship. The rules the assistant was given are in [CLAUDE.md](CLAUDE.md). Mistakes found along the way are fixed in the open history, for example the installer icon fix in release 0.4.1.
 
 ## License
 

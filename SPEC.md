@@ -1,5 +1,7 @@
 # Cliptrace — SPEC
 
+> **Status.** This is the original design spec and milestone plan. It is still the source of truth for goals, privacy rules and the milestone list, but some details have moved on. Known differences: Quick paste is 380×440 (not 380×580); the UI has "all" and "pinned" tabs and no Tags tab; there is no `logs\` folder or file logging; no code enables SQLite WAL mode; the display kind of a clip (link, email, color, path, phone, number, JSON, code, text) is derived when it is read, not stored. For the current behavior, read [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md).
+
 A local-only clipboard history for Windows with semantic search.
 Every copy is stored and indexed on-device, so you can type
 "that Stripe key thing from Tuesday" and get it back.
