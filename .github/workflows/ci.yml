@@ -1,0 +1,46 @@
+name: CI
+
+# Runs the Rust tests and the UI type check and build on every pull request and every push to main.
+# It runs on Windows because the core library uses Win32 APIs (clipboard, DPAPI, registry).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ci-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ci-${{ runner.os }}-
+
+      - name: Test the core library
+        run: cargo test -p cliptrace-core
+
+      - name: Install UI dependencies
+        run: npm --prefix ui ci
+
+      - name: Type check and build the UI
+        run: npm --prefix ui run build
